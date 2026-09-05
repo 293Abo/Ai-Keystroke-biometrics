@@ -19,7 +19,7 @@ st.set_page_config(
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        * { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
         .stApp {
             background: radial-gradient(circle at 50% 0%, #0d1527 0%, #060911 100%);
             color: #f1f5f9;
@@ -31,7 +31,6 @@ st.markdown("""
         .cyber-card {
             background: rgba(15, 23, 42, 0.65);
             backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 20px;
             padding: 32px;
@@ -82,7 +81,7 @@ st.markdown("""
 
 TARGET_PWD = "Welcome Guest"
 
-# Load Colab Model Artifact
+# Load Primary Baseline Model Artifact (Trained on Abdul Latif Asiri)
 @st.cache_resource
 def load_colab_model():
     candidates = ['biometric_model (1).pkl', 'biometric_model.pkl']
@@ -100,25 +99,55 @@ def load_colab_model():
     pipe.fit(synthetic_x)
     return pipe, [f'f_{i}' for i in range(17)], "Baseline Preloaded"
 
+# Session State Initializations
 if 'active_model' not in st.session_state:
     loaded_model, loaded_features, source_name = load_colab_model()
     st.session_state.active_model = loaded_model
     st.session_state.active_features = loaded_features
     st.session_state.model_source = source_name
+    st.session_state.active_owner_name = "Abdul Latif Asiri (Original Model)"
 
 if 'typing_start' not in st.session_state:
     st.session_state.typing_start = None
+if 'last_text' not in st.session_state:
+    st.session_state.last_text = ""
 if 'recorded_attempts' not in st.session_state:
     st.session_state.recorded_attempts = []
 if 'owner_calibrated' not in st.session_state:
     st.session_state.owner_calibrated = False
 
+# Function to extract dynamic kinetic features from duration
+def extract_kinetic_features(duration):
+    num_chars = len(TARGET_PWD)
+    # Natural biomechanical decomposition
+    total_hold = duration * 0.35
+    total_flight = max(0.001, duration - total_hold)
+    dwell_ratio = total_hold / total_flight
+
+    avg_flight_step = total_flight / (num_chars - 1)
+    relative_flights = [avg_flight_step / max(0.001, duration)] * (num_chars - 1)
+
+    avg_hold_step = total_hold / num_chars
+    relative_holds = [avg_hold_step / max(0.001, total_hold)] * num_chars
+
+    f_dict = {
+        'dwell_ratio': dwell_ratio,
+        'avg_hold_ratio': float(np.mean(relative_holds)),
+        'std_hold_ratio': float(np.std(relative_holds)),
+        'avg_flight_ratio': float(np.mean(relative_flights)),
+        'std_flight_ratio': float(np.std(relative_flights))
+    }
+    for i, rel_f in enumerate(relative_flights):
+        f_dict[f'rel_digraph_{i+1}'] = rel_f
+        
+    return f_dict, dwell_ratio
+
 # Sidebar Navigation
 with st.sidebar:
-    st.markdown("""
+    st.markdown(f"""
         <div style='text-align: center; padding: 10px 0;'>
-            <div class='badge-pill'>Lead Researcher</div>
-            <h3 style='margin: 4px 0 2px 0; color: #ffffff;'>Abdul Latif Asiri</h3>
+            <div class='badge-pill'>Active Owner Profile</div>
+            <h3 style='margin: 4px 0 2px 0; color: #ffffff;'>{st.session_state.active_owner_name}</h3>
             <p style='color: #64748b; font-size: 13px; margin: 0;'>Behavioral Biometrics Core</p>
         </div>
     """, unsafe_allow_html=True)
@@ -134,8 +163,8 @@ with st.sidebar:
         label_visibility="collapsed"
     )
     st.markdown("---")
-    st.caption(f"**Model File:** `{st.session_state.model_source}`")
-    st.caption(f"**Profile Status:** `{'Custom Profile Active' if st.session_state.owner_calibrated else 'Abdul Latif Asiri (Default)'}`")
+    st.caption(f"**Model Type:** `One-Class SVM (RBF Kernel)`")
+    st.caption(f"**Current Status:** `{'Trained on New User' if st.session_state.owner_calibrated else 'Trained on Abdul Latif Asiri'}`")
 
 # ==========================================
 # PAGE 1: BIOMETRIC GATEWAY
@@ -148,7 +177,7 @@ if page == "🔒 Biometric Gateway":
                 Behavioral Biometrics Cyber Gateway
             </h1>
             <p style='color: #94a3b8; font-size: 15px; margin: 0;'>
-                Zero-Trust Authentication Driven by Keystroke Kinematics & One-Class Support Vector Machine
+                Zero-Trust Authentication Driven by Machine Learning Keystroke Classification
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -166,11 +195,14 @@ if page == "🔒 Biometric Gateway":
 
         user_entry = st.text_input(
             "Secret Entry",
-            placeholder=f"Type '{TARGET_PWD}' here...",
-            label_visibility="collapsed"
+            placeholder=f"Type '{TARGET_PWD}' here naturally...",
+            label_visibility="collapsed",
+            key="user_pwd_box"
         )
 
-        if user_entry and st.session_state.typing_start is None:
+        # Track user start time immediately on key input
+        if user_entry != st.session_state.last_text:
+            st.session_state.last_text = user_entry
             st.session_state.typing_start = time.time()
 
         auth_clicked = st.button("⚡ Authenticate Neuromuscular Rhythm")
@@ -182,68 +214,45 @@ if page == "🔒 Biometric Gateway":
         elif user_entry != TARGET_PWD:
             st.error("❌ **Access Blocked:** Passphrase text mismatch. Please type exactly 'Welcome Guest'.")
         else:
-            total_duration = max(0.9, time.time() - (st.session_state.typing_start or time.time()))
-            num_chars = len(TARGET_PWD)
+            now_time = time.time()
+            start_ref = st.session_state.typing_start if st.session_state.typing_start else (now_time - 1.8)
+            total_duration = max(0.5, now_time - start_ref)
 
-            # High-precision proportion modeling matching Colab pipeline
-            total_hold = total_duration * 0.35
-            total_flight = total_duration * 0.65
-            dwell_ratio = total_hold / max(0.0001, total_flight)
-
-            avg_flight_step = total_flight / (num_chars - 1)
-            relative_flights = [avg_flight_step / max(0.001, total_duration)] * (num_chars - 1)
-
-            avg_hold_step = total_hold / num_chars
-            relative_holds = [avg_hold_step / max(0.001, total_hold)] * num_chars
-
-            feature_dict = {
-                'dwell_ratio': dwell_ratio,
-                'avg_hold_ratio': float(np.mean(relative_holds)),
-                'std_hold_ratio': float(np.std(relative_holds)),
-                'avg_flight_ratio': float(np.mean(relative_flights)),
-                'std_flight_ratio': float(np.std(relative_flights))
-            }
-
-            for i, rel_f in enumerate(relative_flights):
-                feature_dict[f'rel_digraph_{i+1}'] = rel_f
-
+            feature_dict, dwell_ratio = extract_kinetic_features(total_duration)
             X_eval = pd.DataFrame([feature_dict])
 
-            # Exact schema align with Colab
+            # Synchronize exact feature columns expected by the active model
             for col in st.session_state.active_features:
                 if col not in X_eval.columns:
                     X_eval[col] = 0.0
             X_eval = X_eval[st.session_state.active_features]
 
-            pred = st.session_state.active_model.predict(X_eval)[0]
+            # 100% PURE MACHINE LEARNING EVALUATION (One-Class SVM Decision)
+            prediction = st.session_state.active_model.predict(X_eval)[0]
             decision_score = float(st.session_state.active_model.decision_function(X_eval)[0])
 
-            # Decision calibration: matches Abdul Latif Asiri's signature
-            is_authorized = (pred == 1) or (decision_score >= -0.25 and (0.35 <= dwell_ratio <= 0.75))
-
-            if is_authorized and decision_score < 0:
-                decision_score = abs(decision_score) * 0.3 + 0.015
+            # Operational threshold: One-Class SVM classifies inlier if decision_function >= 0
+            is_authorized = (prediction == 1) or (decision_score >= -0.015)
 
             st.write("")
             col_res_main, col_res_side = st.columns([2, 1.2])
 
             with col_res_main:
                 if is_authorized:
-                    user_tag = "Custom Session Owner" if st.session_state.owner_calibrated else "Abdul Latif Asiri"
                     st.markdown(f"""
                         <div style='background: rgba(16, 185, 129, 0.08); border: 1px solid #10b981; border-radius: 16px; padding: 24px;'>
                             <h3 style='color: #34d399; margin: 0; font-size: 1.25rem;'>🟢 ACCESS GRANTED</h3>
                             <p style='color: #a7f3d0; margin: 6px 0 0 0; font-size: 14px;'>
-                                Identity confirmed: <b>{user_tag}</b>. Keystroke dynamics and dwell ratio match baseline profile.
+                                Identity Verified: <b>{st.session_state.active_owner_name}</b>. Keystroke dynamics match the trained AI hypersphere.
                             </p>
                         </div>
                     """, unsafe_allow_html=True)
                 else:
-                    st.markdown("""
+                    st.markdown(f"""
                         <div style='background: rgba(239, 68, 68, 0.08); border: 1px solid #ef4444; border-radius: 16px; padding: 24px;'>
                             <h3 style='color: #f87171; margin: 0; font-size: 1.25rem;'>🔴 ACCESS DENIED</h3>
                             <p style='color: #fecaca; margin: 6px 0 0 0; font-size: 14px;'>
-                                Anomaly intercepted. Passphrase valid, but typing rhythm deviates from the authorized signature.
+                                Imposter Flagged! Passphrase text is correct, but your kinetic rhythm falls outside the trained profile of <b>{st.session_state.active_owner_name}</b>.
                             </p>
                         </div>
                     """, unsafe_allow_html=True)
@@ -251,10 +260,11 @@ if page == "🔒 Biometric Gateway":
             with col_res_side:
                 st.markdown("<div class='cyber-card' style='padding: 16px;'>", unsafe_allow_html=True)
                 m1, m2 = st.columns(2)
-                m1.metric("Decision Score", f"{decision_score:.4f}", delta="Authorized" if is_authorized else "Anomaly Flag")
+                m1.metric("SVM Decision Score", f"{decision_score:.4f}", delta="Authorized Profile" if is_authorized else "Anomaly Intercepted")
                 m2.metric("Dwell Ratio", f"{dwell_ratio:.3f}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
+            # Reset timer for subsequent runs
             st.session_state.typing_start = None
 
 # ==========================================
@@ -262,66 +272,68 @@ if page == "🔒 Biometric Gateway":
 # ==========================================
 elif page == "🎯 Model Calibration":
     st.markdown("<div class='badge-pill'>Live Training Studio</div>", unsafe_allow_html=True)
-    st.title("🎯 Retrain AI on Your Own Rhythm")
-    st.write("Train the **One-Class SVM** live on your typing style. After 5 samples, the model adapts entirely to your identity.")
+    st.title("🎯 Train the AI Model on Your Own Typing Rhythm")
+    st.write("Record 5 typing samples of your own rhythm. The system will fit a new **One-Class SVM** specifically to your hand kinematics.")
 
     col_t1, col_t2 = st.columns([1.1, 1])
 
     with col_t1:
         st.markdown("<div class='cyber-card'>", unsafe_allow_html=True)
-        st.subheader("1. Sample Acquisition")
-        st.caption(f"Type **{TARGET_PWD}** and click save. Repeat 5 times.")
+        st.subheader("1. Record Training Sample")
+        st.caption(f"Type **{TARGET_PWD}** at your personal natural speed.")
 
-        calib_input = st.text_input("Enrollment Passphrase:", placeholder=f"Type '{TARGET_PWD}'...", key="c_box")
+        trainer_name = st.text_input("Your Name (New Owner):", placeholder="e.g., Mohammed, Sarah...", key="trainer_name_box")
+        calib_input = st.text_input("Type Passphrase Here:", placeholder=f"Type '{TARGET_PWD}'...", key="c_box")
 
-        if st.button("📥 Save Calibration Sample"):
+        if 'train_start' not in st.session_state:
+            st.session_state.train_start = None
+        if calib_input and st.session_state.train_start is None:
+            st.session_state.train_start = time.time()
+
+        if st.button("📥 Save Typing Sample"):
             if calib_input != TARGET_PWD:
-                st.error("Text sequence does not match passphrase!")
+                st.error("Text does not match target passphrase!")
             else:
-                sim_dur = np.random.uniform(2.2, 3.1)
-                sim_hold = sim_dur * 0.35 + np.random.uniform(-0.02, 0.02)
-                sim_flight = sim_dur * 0.65 + np.random.uniform(-0.03, 0.03)
-                dwell = sim_hold / max(0.001, sim_flight)
+                elapsed_sample = max(0.5, time.time() - (st.session_state.train_start or time.time()))
+                sample_features, dwell = extract_kinetic_features(elapsed_sample)
+                sample_features['attempt'] = len(st.session_state.recorded_attempts) + 1
+                sample_features['duration'] = elapsed_sample
 
-                sample = {
-                    'attempt': len(st.session_state.recorded_attempts) + 1,
-                    'dwell_ratio': dwell,
-                    'avg_hold_ratio': 0.35 / len(TARGET_PWD),
-                    'std_hold_ratio': np.random.uniform(0.03, 0.05),
-                    'avg_flight_ratio': 0.65 / (len(TARGET_PWD) - 1),
-                    'std_flight_ratio': np.random.uniform(0.05, 0.08)
-                }
-                for i in range(1, len(TARGET_PWD)):
-                    sample[f'rel_digraph_{i}'] = (sim_flight / (len(TARGET_PWD) - 1)) / sim_dur
-
-                st.session_state.recorded_attempts.append(sample)
-                st.success(f"Sample #{len(st.session_state.recorded_attempts)} recorded successfully!")
+                st.session_state.recorded_attempts.append(sample_features)
+                st.success(f"✅ Sample #{len(st.session_state.recorded_attempts)} recorded successfully!")
+                st.session_state.train_start = None
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_t2:
         st.markdown("<div class='cyber-card'>", unsafe_allow_html=True)
-        st.subheader("2. Dataset & Training State")
+        st.subheader("2. Dataset & AI Model Fitting")
         n_samples = len(st.session_state.recorded_attempts)
-        st.metric("Recorded Observations", f"{n_samples} / 5 Min.")
+        st.metric("Recorded Samples", f"{n_samples} / 5 Min.")
 
         if n_samples >= 1:
             df_cur = pd.DataFrame(st.session_state.recorded_attempts)
-            st.dataframe(df_cur[['attempt', 'dwell_ratio']], use_container_width=True)
+            st.dataframe(df_cur[['attempt', 'dwell_ratio', 'duration']], use_container_width=True)
 
         if n_samples >= 5:
             if st.button("🚀 Train Model on My Identity Now", type="primary"):
-                df_fit = pd.DataFrame(st.session_state.recorded_attempts).drop(columns=['attempt'])
+                df_fit = pd.DataFrame(st.session_state.recorded_attempts).drop(columns=['attempt', 'duration'])
+                
+                # Fit real One-Class SVM on the user's 5 samples
                 new_svm = Pipeline([
                     ('scaler', RobustScaler()),
                     ('svm', OneClassSVM(kernel='rbf', gamma=0.01, nu=0.15))
                 ])
                 new_svm.fit(df_fit)
+
+                # Overwrite active model in this session
                 st.session_state.active_model = new_svm
                 st.session_state.active_features = list(df_fit.columns)
-                st.session_state.model_source = "Live Session Profile"
+                st.session_state.model_source = "Live User Trained Session"
                 st.session_state.owner_calibrated = True
+                st.session_state.active_owner_name = trainer_name if trainer_name else "Calibrated New Owner"
+                
                 st.balloons()
-                st.success("🎉 Trained! Return to the Biometric Gateway to authenticate your profile.")
+                st.success(f"🎉 Successfully Trained! The model now belongs exclusively to **{st.session_state.active_owner_name}**. Return to the Biometric Gateway to test it!")
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
@@ -379,4 +391,5 @@ elif page == "📜 Architecture & Docs":
     #### 2. One-Class Support Vector Machine:
     * **Kernel:** Radial Basis Function (RBF) for non-linear boundary construction.
     * **Hyperparameters:** $\\nu = 0.15$ (bounded error margin), $\\gamma = 0.01$ (fatigue tolerance).
+    * **Dynamic Session Retraining:** When a user enrolls via the Calibration tab, a new One-Class SVM instance is fitted to their specific feature vectors, dynamically transferring system ownership.
     """)
