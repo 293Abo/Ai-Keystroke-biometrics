@@ -4,7 +4,6 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Configure application layout
 st.set_page_config(page_title="AI Biometric Gateway", layout="centered")
 
 st.markdown("""
@@ -14,7 +13,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Load pre-trained model artifact
+# Load model artifact
 @st.cache_resource
 def load_security_system():
     try:
@@ -26,29 +25,29 @@ def load_security_system():
 
 model, feature_columns = load_security_system()
 
-# Communication bridge using query parameters (Most reliable in Streamlit Cloud)
-html_component = """
+# JavaScript Bridge to trigger Streamlit's native input element
+js_bridge = """
 <div style="background-color: #18181b; padding: 25px; border-radius: 12px; border: 1px solid #3f3f46; text-align: center; font-family: sans-serif;">
     <h3 style="color: #38bdf8; margin-top: 0;">Target Passphrase: <span style="color: #facc15;">Welcome Guest</span></h3>
-    <input type="password" id="target_box" autocomplete="off" placeholder="Type passphrase and press Enter..." 
+    <input type="password" id="typing_box" autocomplete="off" placeholder="Type passphrase and press Enter..." 
            style="width: 90%; padding: 14px; font-size: 18px; border-radius: 8px; border: 2px solid #52525b; background: #27272a; color: white; text-align: center; outline: none; margin-bottom: 15px;">
     <br>
-    <button onclick="processAttempt()" style="background-color: #0284c7; color: white; border: none; padding: 12px 30px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+    <button onclick="handleVerification()" style="background-color: #0284c7; color: white; border: none; padding: 12px 30px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold;">
         🔍 Verify Biometric Signature
     </button>
-    <p id="client-feedback" style="margin-top: 15px; font-weight: bold;"></p>
+    <p id="feedback-msg" style="margin-top: 15px; font-weight: bold;"></p>
 </div>
 
 <script>
     let rawLog = [];
     let keyPresses = {};
-    const input = document.getElementById('target_box');
-    const feedback = document.getElementById('client-feedback');
+    const input = document.getElementById('typing_box');
+    const feedback = document.getElementById('feedback-msg');
     const targetPwd = "Welcome Guest";
 
     input.addEventListener('keydown', (e) => {
         if(e.key === 'Enter') {
-            processAttempt();
+            handleVerification();
             return;
         }
         if(e.key.length !== 1) return;
@@ -63,7 +62,7 @@ html_component = """
         }
     });
 
-    function processAttempt() {
+    function handleVerification() {
         if(input.value !== targetPwd) {
             feedback.style.color = "#f43f5e";
             feedback.innerText = "❌ Incorrect text! Type 'Welcome Guest' exactly.";
@@ -72,7 +71,7 @@ html_component = """
         }
 
         feedback.style.color = "#facc15";
-        feedback.innerText = "Processing behavioral rhythm...";
+        feedback.innerText = "Processing biometric pattern...";
 
         let cleanSeq = [];
         let tIndex = targetPwd.length - 1;
@@ -91,29 +90,44 @@ html_component = """
             currentAttemptData.push({ key: cleanSeq[i].key, hold_time: hold, flight_time: flight });
         }
 
-        // Send payload via parent window query parameters
-        const payloadStr = encodeURIComponent(JSON.stringify(currentAttemptData));
-        const currentUrl = new URL(window.parent.location.href);
-        currentUrl.searchParams.set('keystroke_payload', payloadStr);
-        window.parent.location.href = currentUrl.toString();
+        // Bridge: Transfer directly to Streamlit's native input element via React state
+        const targetInput = window.parent.document.querySelector('input[aria-label="bridge_channel"]');
+        if (targetInput) {
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            nativeInputValueSetter.call(targetInput, JSON.stringify(currentAttemptData));
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+            targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        input.value = '';
+        rawLog = [];
+        keyPresses = {};
     }
 </script>
 """
 
-# Render input component
-components.html(html_component, height=220)
+# Native Streamlit input hidden from normal view to receive the bridge payload
+payload_receiver = st.text_input("bridge_channel", label_visibility="collapsed", key="bridge_receiver")
 
-# Retrieve payload from URL params
-query_params = st.query_params
-payload_param = query_params.get("keystroke_payload", None)
+# Hide the bridge input box visually using CSS
+st.markdown("""
+    <style>
+        div[data-testid="stTextInput"]:has(input[aria-label="bridge_channel"]) {
+            display: none !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-if payload_param:
+# Render interactive component
+components.html(js_bridge, height=220)
+
+# Process payload received inside Python
+if payload_receiver:
     try:
-        attempt_records = json.loads(payload_param)
+        attempt_records = json.loads(payload_receiver)
         if attempt_records:
             test_df = pd.DataFrame(attempt_records)
 
-            # 1. Macro-level statistical features
             f_dict = {
                 'total_time': test_df['hold_time'].sum() + test_df['flight_time'].sum(),
                 'avg_hold': test_df['hold_time'].mean(),
@@ -122,20 +136,17 @@ if payload_param:
                 'std_flight': test_df['flight_time'].std() if len(test_df) > 1 else 0
             }
 
-            # 2. Sequential digraph transition features
             flight_times = test_df['flight_time'].tolist()
             for i in range(1, len(flight_times)):
                 f_dict[f'digraph_trans_{i}'] = flight_times[i]
 
             X_live = pd.DataFrame([f_dict]).fillna(0)
 
-            # Realign schema with training baseline
             for col in feature_columns:
                 if col not in X_live.columns:
                     X_live[col] = 0
             X_live = X_live[feature_columns]
 
-            # Model Evaluation
             prediction = model.predict(X_live)[0]
             confidence = model.decision_function(X_live)[0]
 
@@ -148,11 +159,6 @@ if payload_param:
                 st.warning("Passphrase characters match, but behavioral rhythm deviates significantly from the owner's baseline.")
 
             st.metric(label="AI Anomaly Decision Score", value=f"{confidence:.4f}")
-
-            # Clear parameter to keep app clean
-            if st.button("Clear / Next Attempt"):
-                st.query_params.clear()
-                st.rerun()
 
     except Exception as ex:
         st.error(f"Processing error encountered: {ex}")
