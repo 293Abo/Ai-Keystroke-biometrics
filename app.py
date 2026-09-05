@@ -1,7 +1,7 @@
 import time
 import joblib
 import pandas as pd
-from keyup import st_keyup
+from streamlit_keyup import st_keyup
 import streamlit as st
 
 st.set_page_config(page_title="AI Biometric Gateway", layout="centered")
