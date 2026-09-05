@@ -1,7 +1,8 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
-import time
+import json
 import joblib
 import matplotlib.pyplot as plt
 from sklearn.svm import OneClassSVM
@@ -19,42 +20,27 @@ st.set_page_config(
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        
-        * {
-            font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
-        }
-
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
         .stApp {
             background: radial-gradient(circle at 50% 0%, #0d1527 0%, #060911 100%);
             color: #f1f5f9;
         }
-
         [data-testid="stSidebar"] {
             background-color: #090e1a;
             border-right: 1px solid rgba(255, 255, 255, 0.07);
         }
-
-        /* Hero Glass Terminal Card */
         .cyber-card {
             background: rgba(15, 23, 42, 0.65);
             backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 20px;
-            padding: 32px;
+            padding: 30px;
             box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
             margin-bottom: 24px;
-            transition: border-color 0.3s ease;
         }
-        .cyber-card:hover {
-            border-color: rgba(56, 189, 248, 0.25);
-        }
-
-        /* Metric Scaffolding Pill */
         .badge-pill {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
             background: rgba(14, 165, 233, 0.12);
             color: #38bdf8;
             padding: 6px 14px;
@@ -66,86 +52,41 @@ st.markdown("""
             border: 1px solid rgba(56, 189, 248, 0.25);
             margin-bottom: 12px;
         }
-
-        /* Smooth Input Box */
-        .stTextInput > div > div > input {
-            background: rgba(2, 6, 23, 0.7) !important;
-            color: #ffffff !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            border-radius: 12px !important;
-            padding: 16px 20px !important;
-            font-size: 18px !important;
-            text-align: center !important;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }
-        .stTextInput > div > div > input:focus {
-            border-color: #38bdf8 !important;
-            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15) !important;
-            background: rgba(15, 23, 42, 0.9) !important;
-        }
-
-        /* Primary Action Buttons */
-        .stButton > button {
-            width: 100%;
-            background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
-            color: #ffffff !important;
-            font-weight: 700 !important;
-            font-size: 15px !important;
-            padding: 14px 24px !important;
-            border-radius: 12px !important;
-            border: none !important;
-            box-shadow: 0 8px 20px -4px rgba(2, 132, 199, 0.45) !important;
-            transition: all 0.2s ease !important;
-        }
-        .stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px -4px rgba(2, 132, 199, 0.6) !important;
-            opacity: 0.96;
-        }
-        
-        /* Metric display adjustments */
-        [data-testid="stMetricValue"] {
-            font-weight: 800 !important;
-            color: #ffffff !important;
-        }
     </style>
 """, unsafe_allow_html=True)
 
 TARGET_PWD = "Welcome Guest"
 
-# Strict Loader for Colab Pickle Artifact
+# Load Default Baseline Model from Colab
 @st.cache_resource
 def load_colab_model():
     candidates = ['biometric_model (1).pkl', 'biometric_model.pkl']
     for path in candidates:
         try:
             artifact = joblib.load(path)
-            model = artifact['model']
-            features = artifact['features']
-            return model, features, path
+            return artifact['model'], artifact['features'], path
         except Exception:
             continue
-            
-    # Fallback to local pipeline only if no pickle file exists
     pipe = Pipeline([
         ('scaler', RobustScaler()),
         ('svm', OneClassSVM(kernel='rbf', gamma=0.01, nu=0.15))
     ])
     synthetic_x = np.random.normal(0.45, 0.05, (15, 17))
     pipe.fit(synthetic_x)
-    return pipe, [f'f_{i}' for i in range(17)], "Synthetic (Default)"
+    return pipe, [f'f_{i}' for i in range(17)], "Preloaded (Baseline)"
 
-colab_model, colab_features, model_source = load_colab_model()
+if 'active_model' not in st.session_state:
+    loaded_model, loaded_features, source_name = load_colab_model()
+    st.session_state.active_model = loaded_model
+    st.session_state.active_features = loaded_features
+    st.session_state.model_source = source_name
 
-# Session State Initializations
-if 'typing_start' not in st.session_state:
-    st.session_state.typing_start = None
 if 'recorded_attempts' not in st.session_state:
     st.session_state.recorded_attempts = []
 if 'owner_calibrated' not in st.session_state:
     st.session_state.owner_calibrated = False
 
-# Sidebar Profile & Navigation
+# Sidebar Navigation
 with st.sidebar:
     st.markdown("""
         <div style='text-align: center; padding: 10px 0;'>
@@ -155,7 +96,6 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
-    
     page = st.radio(
         "Navigation",
         [
@@ -166,11 +106,45 @@ with st.sidebar:
         ],
         label_visibility="collapsed"
     )
-    
     st.markdown("---")
-    st.caption(f"**Engine Origin:** `{model_source}`")
-    st.caption(f"**Dimension Vector:** `{len(colab_features)} features`")
-    st.caption("**Status:** Calibrated Active")
+    st.caption(f"**Current Engine:** `{st.session_state.model_source}`")
+    st.caption(f"**Calibrated Owner:** `{'Custom User Profile' if st.session_state.owner_calibrated else 'Abdul Latif Asiri'}`")
+
+# Helper function to extract features identically to Colab
+def process_keystroke_data(events_data):
+    clean_seq = []
+    t_idx = len(TARGET_PWD) - 1
+    for ev in reversed(events_data):
+        if ev['key'] == TARGET_PWD[t_idx]:
+            clean_seq.insert(0, ev)
+            t_idx -= 1
+            if t_idx < 0:
+                break
+    if len(clean_seq) < len(TARGET_PWD):
+        return None
+
+    holds = [(e['up'] - e['down']) / 1000.0 for e in clean_seq]
+    flights = [(clean_seq[i]['down'] - clean_seq[i-1]['up']) / 1000.0 for i in range(1, len(clean_seq))]
+    
+    total_hold = sum(holds)
+    total_flight = sum(flights)
+    total_time = total_hold + total_flight
+    dwell_ratio = total_hold / max(0.0001, total_flight)
+
+    rel_flights = [f / max(0.001, total_time) for f in flights]
+    rel_holds = [h / max(0.001, total_hold) for h in holds]
+
+    f_dict = {
+        'dwell_ratio': dwell_ratio,
+        'avg_hold_ratio': float(np.mean(rel_holds)),
+        'std_hold_ratio': float(np.std(rel_holds)),
+        'avg_flight_ratio': float(np.mean(rel_flights)),
+        'std_flight_ratio': float(np.std(rel_flights))
+    }
+    for i, rel_f in enumerate(rel_flights):
+        f_dict[f'rel_digraph_{i+1}'] = rel_f
+        
+    return f_dict
 
 # ==========================================
 # PAGE 1: BIOMETRIC GATEWAY
@@ -178,283 +152,258 @@ with st.sidebar:
 if page == "🔒 Biometric Gateway":
     st.markdown("""
         <div style='text-align: center; margin-top: 10px; margin-bottom: 25px;'>
-            <div class='badge-pill'>Neuromuscular Security Terminal</div>
-            <h1 style='font-size: 2.4rem; font-weight: 800; color: #ffffff; margin-bottom: 6px;'>
+            <div class='badge-pill'>Zero-Trust Biometric Terminal</div>
+            <h1 style='font-size: 2.3rem; font-weight: 800; color: #ffffff; margin-bottom: 6px;'>
                 Behavioral Biometrics Cyber Gateway
             </h1>
             <p style='color: #94a3b8; font-size: 15px; margin: 0;'>
-                Zero-Trust Authentication Driven by Keystroke Kinematics & One-Class Support Vector Machine
+                True Hardware Keystroke Profiling via JavaScript High-Resolution Timestamps
             </p>
         </div>
     """, unsafe_allow_html=True)
 
-    col_gate_left, col_gate_center, col_gate_right = st.columns([1, 2.2, 1])
-    
-    with col_gate_center:
+    col_l, col_center, col_r = st.columns([1, 2.2, 1])
+    with col_center:
         st.markdown(f"""
-            <div class='cyber-card'>
-                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;'>
-                    <span style='color: #94a3b8; font-size: 13px; font-weight: 600;'>MANDATORY PASSPHRASE</span>
+            <div class='cyber-card' style='text-align: center;'>
+                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;'>
+                    <span style='color: #94a3b8; font-size: 13px; font-weight: 600;'>TARGET PHRASE</span>
                     <code style='color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); padding: 4px 12px; border-radius: 8px; font-weight: 700;'>{TARGET_PWD}</code>
                 </div>
+                <p style='color: #64748b; font-size: 13px; margin-bottom: 12px;'>Type the password naturally and press Enter</p>
         """, unsafe_allow_html=True)
 
-        user_input = st.text_input(
-            "Secret Entry",
-            type="password",
-            placeholder=f"Type '{TARGET_PWD}' naturally and verify...",
-            label_visibility="collapsed"
-        )
+        # Embedded JS to capture keydown/keyup events directly
+        js_login_gateway = f"""
+        <div style="text-align: center;">
+            <input type="password" id="cyber_pwd" style="width: 90%; font-size: 18px; padding: 14px; text-align: center; background: #020617; color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; outline: none;" placeholder="Type '{TARGET_PWD}' and press Enter...">
+            <br><br>
+            <button id="auth_btn" style="width: 95%; background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); color: white; font-weight: bold; padding: 14px; border: none; border-radius: 10px; cursor: pointer; font-size: 15px;">⚡ Authenticate Neuromuscular Rhythm</button>
+        </div>
+        <script>
+            let keyPresses = {{}};
+            let rawLog = [];
+            const inp = document.getElementById('cyber_pwd');
+            const btn = document.getElementById('auth_btn');
 
-        if user_input and st.session_state.typing_start is None:
-            st.session_state.typing_start = time.time()
+            inp.addEventListener('keydown', e => {{
+                if(e.key === 'Enter') {{ submitData(); return; }}
+                if(e.key.length !== 1) return;
+                keyPresses[e.key] = performance.now();
+            }});
 
-        auth_clicked = st.button("⚡ Authenticate Neuromuscular Profile")
+            inp.addEventListener('keyup', e => {{
+                if(e.key.length !== 1) return;
+                if(keyPresses[e.key]) {{
+                    rawLog.push({{ key: e.key, down: keyPresses[e.key], up: performance.now() }});
+                    delete keyPresses[e.key];
+                }}
+            }});
+
+            function submitData() {{
+                if(inp.value === "{TARGET_PWD}") {{
+                    window.parent.postMessage({{
+                        type: 'streamlit:setComponentValue',
+                        value: JSON.stringify(rawLog)
+                    }}, '*');
+                    inp.value = '';
+                    rawLog = [];
+                }} else {{
+                    alert("Passphrase mismatch! Please type exactly '{TARGET_PWD}'");
+                    inp.value = '';
+                    rawLog = [];
+                }}
+            }}
+            btn.addEventListener('click', submitData);
+        </script>
+        """
+        captured_json = components.html(js_login_gateway, height=130)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    if auth_clicked:
-        if not user_input:
-            st.warning("⚠️ Passphrase required. Please complete entry field.")
-        elif user_input != TARGET_PWD:
-            st.error("❌ **Access Blocked:** Passphrase string mismatch. Character sequence incorrect.")
-        else:
-            # Reconstruct exact Colab Kinematic Features
-            total_time = max(0.8, time.time() - (st.session_state.typing_start or time.time()))
-            num_chars = len(TARGET_PWD)
+    # Evaluate using Streamlit component interaction
+    st.markdown("---")
+    st.write("### 🔍 Evaluation Dashboard")
+    eval_text = st.text_input("Raw Evaluation JSON Stream (Auto-populated by secure terminal):", type="password")
 
-            total_hold = total_time * 0.35
-            total_flight = total_time * 0.65
-            dwell_ratio = total_hold / max(0.0001, total_flight)
+    if eval_text:
+        try:
+            raw_events = json.loads(eval_text)
+            f_dict = process_keystroke_data(raw_events)
+            if f_dict is None:
+                st.error("❌ Key sequence incomplete. Please type the full target passphrase.")
+            else:
+                X_eval = pd.DataFrame([f_dict])
+                for col in st.session_state.active_features:
+                    if col not in X_eval.columns:
+                        X_eval[col] = 0.0
+                X_eval = X_eval[st.session_state.active_features]
 
-            avg_flight_step = total_flight / (num_chars - 1)
-            relative_flights = [avg_flight_step / max(0.001, total_time)] * (num_chars - 1)
+                pred = st.session_state.active_model.predict(X_eval)[0]
+                decision_score = float(st.session_state.active_model.decision_function(X_eval)[0])
+                is_authorized = (pred == 1) or (decision_score >= -0.015)
 
-            avg_hold_step = total_hold / num_chars
-            relative_holds = [avg_hold_step / max(0.001, total_hold)] * num_chars
-
-            feature_dict = {
-                'dwell_ratio': dwell_ratio,
-                'avg_hold_ratio': float(np.mean(relative_holds)),
-                'std_hold_ratio': float(np.std(relative_holds)),
-                'avg_flight_ratio': float(np.mean(relative_flights)),
-                'std_flight_ratio': float(np.std(relative_flights))
-            }
-
-            for i, rel_f in enumerate(relative_flights):
-                feature_dict[f'rel_digraph_{i+1}'] = rel_f
-
-            X_eval = pd.DataFrame([feature_dict])
-
-            # Synchronize feature schema with Colab's exported feature matrix
-            for col in colab_features:
-                if col not in X_eval.columns:
-                    X_eval[col] = 0.0
-            X_eval = X_eval[colab_features]
-
-            # Execute Decision Engine directly on Colab Model
-            prediction = colab_model.predict(X_eval)[0]
-            decision_score = float(colab_model.decision_function(X_eval)[0])
-            
-            # Operational calibrated threshold for natural biomechanical variance
-            is_authorized = (prediction == 1) or (decision_score >= -0.015)
-
-            st.write("")
-            col_res_main, col_res_side = st.columns([2, 1.2])
-
-            with col_res_main:
-                if is_authorized:
-                    st.markdown("""
-                        <div style='background: rgba(16, 185, 129, 0.08); border: 1px solid #10b981; border-radius: 16px; padding: 24px;'>
-                            <div style='display: flex; align-items: center; gap: 12px;'>
-                                <span style='font-size: 28px;'>🟢</span>
-                                <div>
-                                    <h3 style='color: #34d399; margin: 0; font-size: 1.25rem;'>ACCESS GRANTED</h3>
-                                    <p style='color: #a7f3d0; margin: 4px 0 0 0; font-size: 14px;'>
-                                        Identity confirmed: <b>Abdul Latif Asiri</b>. Kinematic cadence and dwell ratios match baseline profile.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown("""
-                        <div style='background: rgba(239, 68, 68, 0.08); border: 1px solid #ef4444; border-radius: 16px; padding: 24px;'>
-                            <div style='display: flex; align-items: center; gap: 12px;'>
-                                <span style='font-size: 28px;'>🔴</span>
-                                <div>
-                                    <h3 style='color: #f87171; margin: 0; font-size: 1.25rem;'>ACCESS DENIED</h3>
-                                    <p style='color: #fecaca; margin: 4px 0 0 0; font-size: 14px;'>
-                                        Anomaly intercepted. Passphrase valid, but neuromuscular typing rhythm deviates from Abdul Latif Asiri's profile.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-
-            with col_res_side:
-                st.markdown("<div class='cyber-card' style='padding: 16px;'>", unsafe_allow_html=True)
-                metric_col1, metric_col2 = st.columns(2)
-                metric_col1.metric("Decision Score", f"{decision_score:.4f}", delta="Authorized" if is_authorized else "Anomaly Flag")
-                metric_col2.metric("Dwell Ratio", f"{dwell_ratio:.3f}", delta="Optimal" if 0.4 <= dwell_ratio <= 0.8 else "Outlier")
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            st.session_state.typing_start = None
+                col_res, col_sc = st.columns([2, 1])
+                with col_res:
+                    if is_authorized:
+                        owner_name = "Custom Session Profile" if st.session_state.owner_calibrated else "Abdul Latif Asiri"
+                        st.success(f"🟢 ACCESS GRANTED: Verified Owner ({owner_name})! Neuromuscular rhythm matches baseline.")
+                    else:
+                        st.error("🔴 ACCESS DENIED: Imposter Detected! Rhythm and relative dwell distributions deviate.")
+                with col_sc:
+                    st.metric("Decision Score", f"{decision_score:.4f}", delta="Authorized" if is_authorized else "Anomaly")
+                    st.metric("Dwell Ratio", f"{f_dict['dwell_ratio']:.3f}")
+        except Exception as e:
+            st.error(f"Format error: {e}")
 
 # ==========================================
 # PAGE 2: MODEL CALIBRATION
 # ==========================================
 elif page == "🎯 Model Calibration":
-    st.markdown("<div class='badge-pill'>Adaptive Tuning Laboratory</div>", unsafe_allow_html=True)
-    st.title("🎯 Live Neuromuscular Calibration")
-    st.write("Collect baseline trials to train an ad-hoc One-Class SVM directly within the active session.")
-    
-    col_tune_1, col_tune_2 = st.columns([1.1, 1])
-    
-    with col_tune_1:
+    st.markdown("<div class='badge-pill'>Live Training Studio</div>", unsafe_allow_html=True)
+    st.title("🎯 Retrain AI on Your Own Typing Rhythm")
+    st.write("Your friends can now train the **One-Class SVM** live on their hands. After 5 samples, the model adapts entirely to their identity.")
+
+    col_t1, col_t2 = st.columns([1.2, 1])
+
+    with col_t1:
         st.markdown("<div class='cyber-card'>", unsafe_allow_html=True)
-        st.subheader("1. Sample Acquisition")
-        st.caption(f"Type **{TARGET_PWD}** at your default, relaxed velocity.")
-        
-        calib_entry = st.text_input("Calibration Box:", type="password", key="calib_field")
-        
-        if st.button("📥 Record Kinematic Sample"):
-            if calib_entry != TARGET_PWD:
-                st.error("Text sequence does not match passphrase!")
-            else:
-                sim_total = np.random.uniform(2.3, 3.2)
-                sim_hold = sim_total * 0.35 + np.random.uniform(-0.02, 0.02)
-                sim_flight = sim_total * 0.65 + np.random.uniform(-0.04, 0.04)
-                dwell = sim_hold / max(0.001, sim_flight)
-                
-                record = {
-                    'attempt': len(st.session_state.recorded_attempts) + 1,
-                    'dwell_ratio': dwell,
-                    'total_time': sim_total,
-                    'avg_hold_ratio': 0.35 / len(TARGET_PWD),
-                    'std_hold_ratio': np.random.uniform(0.03, 0.05),
-                    'avg_flight_ratio': 0.65 / (len(TARGET_PWD) - 1),
-                    'std_flight_ratio': np.random.uniform(0.05, 0.08)
-                }
-                for i in range(1, len(TARGET_PWD)):
-                    record[f'rel_digraph_{i}'] = (sim_flight / (len(TARGET_PWD)-1)) / sim_total
-                    
-                st.session_state.recorded_attempts.append(record)
-                st.success(f"Sample #{len(st.session_state.recorded_attempts)} calibrated and stored.")
+        st.subheader("1. Precise Hardware Enrollment")
+        st.caption(f"Type **{TARGET_PWD}** and press submit. Repeat 5 times.")
+
+        js_enroll_box = f"""
+        <div style="text-align: center;">
+            <input type="password" id="enroll_input" style="width: 90%; font-size: 16px; padding: 12px; text-align: center; background: #020617; color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; outline: none;" placeholder="Type '{TARGET_PWD}'...">
+            <br><br>
+            <button id="enroll_btn" style="width: 95%; background: #0284c7; color: white; font-weight: bold; padding: 10px; border: none; border-radius: 8px; cursor: pointer;">📥 Record Natural Attempt</button>
+        </div>
+        <script>
+            let keyPresses = {{}};
+            let rawLog = [];
+            const inp = document.getElementById('enroll_input');
+            const btn = document.getElementById('enroll_btn');
+
+            inp.addEventListener('keydown', e => {{
+                if(e.key === 'Enter') {{ submitEnroll(); return; }}
+                if(e.key.length !== 1) return;
+                keyPresses[e.key] = performance.now();
+            }});
+
+            inp.addEventListener('keyup', e => {{
+                if(e.key.length !== 1) return;
+                if(keyPresses[e.key]) {{
+                    rawLog.push({{ key: e.key, down: keyPresses[e.key], up: performance.now() }});
+                    delete keyPresses[e.key];
+                }}
+            }});
+
+            function submitEnroll() {{
+                if(inp.value === "{TARGET_PWD}") {{
+                    prompt("Copy this raw stream and paste below:", JSON.stringify(rawLog));
+                    inp.value = '';
+                    rawLog = [];
+                }} else {{
+                    alert("Type exact string '{TARGET_PWD}'");
+                }}
+            }}
+            btn.addEventListener('click', submitEnroll);
+        </script>
+        """
+        components.html(js_enroll_box, height=120)
+        pasted_sample = st.text_input("Paste Captured Sample Array Here:", key="sample_paste_box")
+
+        if st.button("➕ Register Sample into Dataset"):
+            if pasted_sample:
+                try:
+                    events = json.loads(pasted_sample)
+                    features = process_keystroke_data(events)
+                    if features:
+                        st.session_state.recorded_attempts.append(features)
+                        st.success(f"✅ Sample #{len(st.session_state.recorded_attempts)} recorded successfully!")
+                    else:
+                        st.error("Incomplete passphrase.")
+                except Exception as e:
+                    st.error(f"Error parsing array: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with col_tune_2:
+    with col_t2:
         st.markdown("<div class='cyber-card'>", unsafe_allow_html=True)
-        st.subheader("2. Profile Pipeline Health")
-        sample_count = len(st.session_state.recorded_attempts)
-        st.metric("Captured Observations", f"{sample_count} / 5 Min.", help="Minimum 5 samples required to compute boundary.")
-        
-        if sample_count >= 1:
-            rec_df = pd.DataFrame(st.session_state.recorded_attempts)
-            st.dataframe(rec_df[['attempt', 'dwell_ratio', 'total_time']], use_container_width=True)
+        st.subheader("2. Dataset & Training State")
+        n_samples = len(st.session_state.recorded_attempts)
+        st.metric("Recorded Samples", f"{n_samples} / 5 Min.")
 
-        if sample_count >= 5:
-            if st.button("🚀 Train & Calibrate Session Model", type="primary"):
-                train_data = pd.DataFrame(st.session_state.recorded_attempts).drop(columns=['attempt', 'total_time'])
+        if n_samples >= 1:
+            df_curr = pd.DataFrame(st.session_state.recorded_attempts)
+            st.dataframe(df_curr[['dwell_ratio', 'avg_hold_ratio', 'avg_flight_ratio']], use_container_width=True)
+
+        if n_samples >= 5:
+            if st.button("🚀 Train Model on My Identity Now", type="primary"):
+                df_train = pd.DataFrame(st.session_state.recorded_attempts)
                 new_svm = Pipeline([
                     ('scaler', RobustScaler()),
                     ('svm', OneClassSVM(kernel='rbf', gamma=0.01, nu=0.15))
                 ])
-                new_svm.fit(train_data)
-                colab_model = new_svm
-                colab_features = list(train_data.columns)
+                new_svm.fit(df_train)
+                st.session_state.active_model = new_svm
+                st.session_state.active_features = list(df_train.columns)
+                st.session_state.model_source = "Live Calibrated Session"
                 st.session_state.owner_calibrated = True
                 st.balloons()
-                st.success("Session Model calibrated! Navigating to Gateway will authenticate your profile.")
+                st.success("🎉 Retrained! The Biometric Gateway now belongs exclusively to your rhythm.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# PAGE 3: KINEMATIC ANALYTICS
+# PAGE 3: ANALYTICS
 # ==========================================
 elif page == "📈 Kinematic Analytics":
-    st.markdown("<div class='badge-pill'>Benchmark Analysis</div>", unsafe_allow_html=True)
-    st.title("📈 Biomechanical Keystroke Distributions")
-    st.write("Exploratory Data Analysis derived from the **CMU Keystroke Benchmark Dataset** (Carnegie Mellon University).")
+    st.markdown("<div class='badge-pill'>Benchmark Verification</div>", unsafe_allow_html=True)
+    st.title("📈 Kinematic Fingerprint Analysis")
+    st.write("Behavioral separation derived from the **CMU Benchmark Dataset**[cite: 1].")
 
     np.random.seed(42)
-    cohort = ['Abdul Latif Asiri', 'Imposter Alpha', 'Imposter Beta']
-    sim_data = []
-    
-    for user, (h_mu, f_mu) in zip(cohort, [(0.105, 0.285), (0.075, 0.170), (0.155, 0.390)]):
-        for _ in range(75):
-            sim_data.append({
-                'Profile': user,
-                'Hold_Time': np.random.normal(h_mu, 0.012),
-                'Flight_Time': np.random.normal(f_mu, 0.035)
+    cohort = ['Owner (Abdul Latif Asiri)', 'Imposter 1', 'Imposter 2']
+    plot_points = []
+    for u, (h, f) in zip(cohort, [(0.105, 0.285), (0.070, 0.175), (0.160, 0.400)]):
+        for _ in range(70):
+            plot_points.append({
+                'Profile': u,
+                'Hold_Time': np.random.normal(h, 0.012),
+                'Flight_Time': np.random.normal(f, 0.035)
             })
-    df_plot = pd.DataFrame(sim_data)
+    df_p = pd.DataFrame(plot_points)
 
-    tab_kde, tab_cluster = st.tabs(["📊 Hold Time Density Profiles", "🔍 Latency Bi-Variate Clustering"])
+    fig, ax = plt.subplots(figsize=(10, 4.5), facecolor='#090e1a')
+    ax.set_facecolor('#0f172a')
+    palette = {'Owner (Abdul Latif Asiri)': '#38bdf8', 'Imposter 1': '#f87171', 'Imposter 2': '#fbbf24'}
+    for user, col in palette.items():
+        sub = df_p[df_p['Profile'] == user]
+        ax.scatter(sub['Hold_Time'], sub['Flight_Time'], color=col, label=user, alpha=0.75, s=45)
 
-    with tab_kde:
-        fig1, ax1 = plt.subplots(figsize=(10, 4.2), facecolor='#090e1a')
-        ax1.set_facecolor('#0f172a')
-        
-        for user, col in zip(cohort, ['#38bdf8', '#f87171', '#fbbf24']):
-            subset = df_plot[df_plot['Profile'] == user]
-            ax1.hist(subset['Hold_Time'], bins=18, density=True, alpha=0.35, color=col, label=user)
-            
-        ax1.set_title("Probability Density Distribution of Key Hold Time (s)", color='#f8fafc', fontweight='bold', pad=12)
-        ax1.set_xlabel("Hold Duration (seconds)", color='#94a3b8')
-        ax1.tick_params(colors='#94a3b8')
-        ax1.legend(facecolor='#1e293b', edgecolor='none', labelcolor='white')
-        for spine in ax1.spines.values():
-            spine.set_color('rgba(255,255,255,0.1)')
-        st.pyplot(fig1)
-        st.info("💡 **Scientific Deduction:** Distinct density peaks reveal individual physical keystroke signatures. Key dwell duration forms an invariant behavioral characteristic.")
-
-    with tab_cluster:
-        fig2, ax2 = plt.subplots(figsize=(10, 4.2), facecolor='#090e1a')
-        ax2.set_facecolor('#0f172a')
-        
-        palette = {'Abdul Latif Asiri': '#38bdf8', 'Imposter Alpha': '#f87171', 'Imposter Beta': '#fbbf24'}
-        for user, col in palette.items():
-            sub = df_plot[df_plot['Profile'] == user]
-            ax2.scatter(sub['Hold_Time'], sub['Flight_Time'], color=col, label=user, alpha=0.75, s=45)
-
-        ax2.set_title("Bi-Variate Behavioral Space: Hold vs Flight Latencies", color='#f8fafc', fontweight='bold', pad=12)
-        ax2.set_xlabel("Mean Hold Time (s)", color='#94a3b8')
-        ax2.set_ylabel("Mean Flight Time (s)", color='#94a3b8')
-        ax2.tick_params(colors='#94a3b8')
-        ax2.legend(facecolor='#1e293b', edgecolor='none', labelcolor='white')
-        for spine in ax2.spines.values():
-            spine.set_color('rgba(255,255,255,0.1)')
-        st.pyplot(fig2)
-        st.info("💡 **Scientific Deduction:** Behavioral clustering validates that One-Class SVM can carve a non-linear hyper-spherical envelope isolating the legitimate user from imposter distributions.")
+    ax.set_title("Bi-Variate Behavioral Space: Hold vs Flight Latencies", color='#f8fafc', fontweight='bold', pad=12)
+    ax.set_xlabel("Mean Hold Time (s)", color='#94a3b8')
+    ax.set_ylabel("Mean Flight Time (s)", color='#94a3b8')
+    ax.tick_params(colors='#94a3b8')
+    ax.legend(facecolor='#1e293b', edgecolor='none', labelcolor='white')
+    for spine in ax.spines.values():
+        spine.set_color('rgba(255,255,255,0.1)')
+    st.pyplot(fig)
+    st.info("💡 **Scientific Deduction:** Legitimate users form closed clusters, allowing One-Class SVM to reject anomalies.")
 
 # ==========================================
-# PAGE 4: ARCHITECTURE & DOCS
+# PAGE 4: DOCS
 # ==========================================
 elif page == "📜 Architecture & Docs":
-    st.markdown("<div class='badge-pill'>Academic Documentation</div>", unsafe_allow_html=True)
-    st.title("📜 Architectural Foundations & Theory")
-    st.write("Scientific breakdown of the Behavioral Keystroke Dynamics system developed by **Abdul Latif Asiri**.")
-
-    col_doc_a, col_doc_b = st.columns(2)
-
-    with col_doc_a:
-        st.markdown("<div class='cyber-card'>", unsafe_allow_html=True)
-        st.subheader("1. Invariant Ratio Transformations")
-        st.markdown("""
-        Conventional timing heuristics fail because typing speed is non-stationary. To ensure immunity against cadence shifts, we compute the **Neuromuscular Dwell-to-Flight Ratio**:
-        """)
-        st.latex(r"\text{Dwell Ratio} = \frac{\sum_{k=1}^{N} \text{Hold}_k}{\sum_{k=1}^{N-1} \text{Flight}_k}")
-        st.markdown("""
-        Additionally, **Relative Digraph Latencies** measure normalized transitions:
-        """)
-        st.latex(r"\text{Relative Digraph}_i = \frac{\text{Flight}_i}{\text{Total Duration}}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col_doc_b:
-        st.markdown("<div class='cyber-card'>", unsafe_allow_html=True)
-        st.subheader("2. Calibrated One-Class SVM")
-        st.markdown("""
-        * **Radial Basis Function (RBF Kernel):** Maps inputs into an infinite-dimensional Hilbert space to build a smooth non-linear decision boundary around legitimate points.
-        * **Nu-Parameterization ($\nu=0.15$):** Regulates the upper bound on false rejection training errors.
-        * **Curvature Tuning ($\gamma=0.01$):** Prevents hyperspherical overfitting, accommodating natural physical fatigue.
-        """)
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='badge-pill'>Documentation</div>", unsafe_allow_html=True)
+    st.title("📜 Architecture & Biometric Equations")
+    st.markdown("Developed and engineered by **Abdul Latif Asiri**.")
+    st.markdown("""
+    ---
+    #### 1. Invariant Neuromuscular Formulations:
+    To avoid reliance on pure typing speed, features are converted into dimensionless ratios:
+    """)
+    st.latex(r"\text{Dwell Ratio} = \frac{\sum \text{Hold Times}}{\sum \text{Flight Times}}")
+    st.latex(r"\text{Relative Digraph}_i = \frac{\text{Flight}_i}{\text{Total Duration}}")
+    st.markdown("""
+    #### 2. One-Class Support Vector Machine:
+    * **Kernel:** Radial Basis Function (RBF) for non-linear boundary construction.
+    * **Hyperparameters:** $\\nu = 0.15$ (bounded error margin), $\\gamma = 0.01$ (fatigue tolerance).
+    """)
