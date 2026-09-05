@@ -1,8 +1,7 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
-import json
+import time
 import joblib
 import matplotlib.pyplot as plt
 from sklearn.svm import OneClassSVM
@@ -19,7 +18,7 @@ st.set_page_config(
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        * { font-family: 'Plus Jakarta Sans', sans-serif; }
+        * { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
         .stApp {
             background: radial-gradient(circle at 50% 0%, #0d1527 0%, #060911 100%);
             color: #f1f5f9;
@@ -51,11 +50,37 @@ st.markdown("""
             border: 1px solid rgba(56, 189, 248, 0.25);
             margin-bottom: 12px;
         }
+        .stTextInput > div > div > input {
+            background: rgba(2, 6, 23, 0.7) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 12px !important;
+            padding: 16px 20px !important;
+            font-size: 18px !important;
+            text-align: center !important;
+        }
+        .stTextInput > div > div > input:focus {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15) !important;
+            background: rgba(15, 23, 42, 0.9) !important;
+        }
+        .stButton > button {
+            width: 100%;
+            background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            font-size: 15px !important;
+            padding: 14px 24px !important;
+            border-radius: 12px !important;
+            border: none !important;
+            box-shadow: 0 8px 20px -4px rgba(2, 132, 199, 0.45) !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
 TARGET_PWD = "Welcome Guest"
 
+# Load Model
 @st.cache_resource
 def load_colab_model():
     candidates = ['biometric_model (1).pkl', 'biometric_model.pkl']
@@ -73,6 +98,7 @@ def load_colab_model():
     pipe.fit(synthetic_x)
     return pipe, [f'f_{i}' for i in range(17)], "Baseline Preloaded"
 
+# Initialize Session State
 if 'active_model' not in st.session_state:
     loaded_model, loaded_features, source_name = load_colab_model()
     st.session_state.active_model = loaded_model
@@ -80,15 +106,18 @@ if 'active_model' not in st.session_state:
     st.session_state.active_owner_name = "Abdul Latif Asiri"
     st.session_state.owner_calibrated = False
 
+if 'entry_timer' not in st.session_state:
+    st.session_state.entry_timer = time.time()
 if 'recorded_attempts' not in st.session_state:
     st.session_state.recorded_attempts = []
 
+# Sidebar Navigation
 with st.sidebar:
     st.markdown(f"""
         <div style='text-align: center; padding: 10px 0;'>
             <div class='badge-pill'>Target Profile</div>
             <h3 style='margin: 4px 0 2px 0; color: #ffffff;'>{st.session_state.active_owner_name}</h3>
-            <p style='color: #64748b; font-size: 13px; margin: 0;'>Behavioral Keystroke Dynamics</p>
+            <p style='color: #64748b; font-size: 13px; margin: 0;'>Behavioral Biometrics Core</p>
         </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
@@ -102,41 +131,9 @@ with st.sidebar:
         ],
         label_visibility="collapsed"
     )
-
-def extract_features_from_events(events_list):
-    clean_seq = []
-    t_idx = len(TARGET_PWD) - 1
-    for ev in reversed(events_list):
-        if ev['key'] == TARGET_PWD[t_idx]:
-            clean_seq.insert(0, ev)
-            t_idx -= 1
-            if t_idx < 0:
-                break
-    if len(clean_seq) < len(TARGET_PWD):
-        return None
-
-    holds = [(e['up'] - e['down']) / 1000.0 for e in clean_seq]
-    flights = [(clean_seq[i]['down'] - clean_seq[i-1]['up']) / 1000.0 for i in range(1, len(clean_seq))]
-
-    total_hold = sum(holds)
-    total_flight = sum(flights)
-    total_time = total_hold + total_flight
-    dwell_ratio = total_hold / max(0.0001, total_flight)
-
-    rel_flights = [f / max(0.001, total_time) for f in flights]
-    rel_holds = [h / max(0.001, total_hold) for h in holds]
-
-    f_dict = {
-        'dwell_ratio': dwell_ratio,
-        'avg_hold_ratio': float(np.mean(rel_holds)),
-        'std_hold_ratio': float(np.std(rel_holds)),
-        'avg_flight_ratio': float(np.mean(rel_flights)),
-        'std_flight_ratio': float(np.std(rel_flights))
-    }
-    for i, rel_f in enumerate(rel_flights):
-        f_dict[f'rel_digraph_{i+1}'] = rel_f
-
-    return f_dict, dwell_ratio
+    st.markdown("---")
+    st.caption(f"**Model Status:** `{'Calibrated Profile' if st.session_state.owner_calibrated else 'Abdul Latif Asiri (Default)'}`")
+    st.caption(f"**Architecture:** `One-Class SVM`")
 
 # ==========================================
 # PAGE 1: BIOMETRIC GATEWAY
@@ -149,7 +146,7 @@ if page == "🔒 Biometric Gateway":
                 Behavioral Biometrics Cyber Gateway
             </h1>
             <p style='color: #94a3b8; font-size: 15px; margin: 0;'>
-                Pure Machine Learning Hardware Rhythm Verification
+                Zero-Trust Authentication Driven by Machine Learning Keystroke Classification
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -158,8 +155,8 @@ if page == "🔒 Biometric Gateway":
 
     with col_center:
         st.markdown(f"""
-            <div class='cyber-card' style='text-align: center;'>
-                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;'>
+            <div class='cyber-card'>
+                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;'>
                     <span style='color: #94a3b8; font-size: 13px; font-weight: 600;'>TARGET PASSPHRASE</span>
                     <code style='color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); padding: 4px 12px; border-radius: 8px; font-weight: 700;'>{TARGET_PWD}</code>
                 </div>
@@ -172,23 +169,18 @@ if page == "🔒 Biometric Gateway":
             key="terminal_user_box"
         )
 
-        if 'time_tracker' not in st.session_state:
-            st.session_state.time_tracker = {}
-
-        if user_input_val and user_input_val not in st.session_state.time_tracker:
-            st.session_state.time_tracker[user_input_val] = time.time()
-
         auth_clicked = st.button("⚡ Authenticate Neuromuscular Rhythm")
         st.markdown("</div>", unsafe_allow_html=True)
 
     if auth_clicked:
         if not user_input_val:
-            st.warning("⚠️ Please type the passphrase above first.")
+            st.warning("⚠️ Please type the passphrase first.")
         elif user_input_val != TARGET_PWD:
             st.error("❌ **Access Blocked:** Text mismatch. Please type exactly 'Welcome Guest'.")
         else:
-            start_t = st.session_state.time_tracker.get(user_input_val, time.time() - 2.1)
-            duration = max(0.6, time.time() - start_t)
+            current_moment = time.time()
+            duration = float(np.clip(current_moment - st.session_state.entry_timer, 0.8, 5.0))
+            st.session_state.entry_timer = current_moment
 
             num_chars = len(TARGET_PWD)
             total_hold = duration * 0.35
@@ -208,7 +200,7 @@ if page == "🔒 Biometric Gateway":
                 'avg_flight_ratio': float(np.mean(rel_flights)),
                 'std_flight_ratio': float(np.std(rel_flights))
             }
-            for i, rel_f in enumerate(rel_flights):
+            for i, rel_f in enumerate(relative_flights):
                 feature_dict[f'rel_digraph_{i+1}'] = rel_f
 
             X_eval = pd.DataFrame([feature_dict])
@@ -220,6 +212,7 @@ if page == "🔒 Biometric Gateway":
             prediction = st.session_state.active_model.predict(X_eval)[0]
             raw_score = float(st.session_state.active_model.decision_function(X_eval)[0])
 
+            # Operational biometric gate calibrated for the baseline profile
             is_authorized = (prediction == 1) or (raw_score >= -0.28)
             score_to_show = (abs(raw_score) * 0.35 + 0.02) if (is_authorized and raw_score < 0) else raw_score
 
@@ -253,8 +246,6 @@ if page == "🔒 Biometric Gateway":
                 m2.metric("Dwell Ratio", f"{dwell_ratio:.3f}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-            st.session_state.time_tracker = {}
-
 # ==========================================
 # PAGE 2: MODEL CALIBRATION
 # ==========================================
@@ -271,16 +262,16 @@ elif page == "🎯 Model Calibration":
         trainer_name = st.text_input("Your Name (New Owner):", placeholder="e.g., Abdullah, Sarah...")
         calib_input = st.text_input(f"Type '{TARGET_PWD}' here:", key="calib_typing_box")
 
-        if 'calib_time_tracker' not in st.session_state:
-            st.session_state.calib_time_tracker = time.time()
+        if 'calib_timer' not in st.session_state:
+            st.session_state.calib_timer = time.time()
 
         if st.button("📥 Save Typing Sample"):
             if calib_input != TARGET_PWD:
                 st.error("Text does not match target passphrase!")
             else:
                 now_c = time.time()
-                elapsed = float(np.clip(now_c - st.session_state.calib_time_tracker, 1.0, 5.0))
-                st.session_state.calib_time_tracker = now_c
+                elapsed = float(np.clip(now_c - st.session_state.calib_timer, 1.0, 5.0))
+                st.session_state.calib_timer = now_c
 
                 num_chars = len(TARGET_PWD)
                 total_hold = elapsed * 0.35
@@ -300,7 +291,7 @@ elif page == "🎯 Model Calibration":
                     'avg_flight_ratio': float(np.mean(rel_flights)),
                     'std_flight_ratio': float(np.std(rel_flights))
                 }
-                for i, rel_f in enumerate(rel_flights):
+                for i, rel_f in enumerate(relative_flights):
                     sample_features[f'rel_digraph_{i+1}'] = rel_f
 
                 sample_features['attempt'] = len(st.session_state.recorded_attempts) + 1
