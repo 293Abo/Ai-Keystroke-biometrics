@@ -1,56 +1,138 @@
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+import os
+import json
 import joblib
 import numpy as np
 import pandas as pd
+from typing import List, Dict, Any
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import Dict
-import os
+from sklearn.svm import OneClassSVM
+from sklearn.preprocessing import RobustScaler
+from sklearn.pipeline import Pipeline
 
-app = FastAPI(title="Kinetic Biometrics Realtime API")
+app = FastAPI(title="Kinetic Biometrics Gateway")
 
-# تحميل الموديل تلقائياً من الملفات الموجودة
-MODEL_FILES = ['biometric_model (1).pkl', 'biometric_model.pkl']
-model = None
-features = []
+TARGET_PASSPHRASE = "Welcome Guest"
+MODEL_PATH = "biometric_model.pkl"
 
-for m_path in MODEL_FILES:
-    if os.path.exists(m_path):
-        try:
-            artifact = joblib.load(m_path)
-            model = artifact['model']
-            features = artifact['features']
-            break
-        except Exception:
-            continue
+class SystemState:
+    def __init__(self):
+        self.owner_name = "Verified Owner"
+        self.model = None
+        self.features = []
+        self.load_initial_model()
 
-class BiometricPayload(BaseModel):
-    features: Dict[str, float]
+    def load_initial_model(self):
+        candidates = [MODEL_PATH, "biometric_model (1).pkl"]
+        for path in candidates:
+            if os.path.exists(path):
+                try:
+                    artifact = joblib.load(path)
+                    self.model = artifact['model']
+                    self.features = artifact['features']
+                    return
+                except Exception:
+                    continue
+        
+        # إنشاء خط أنابيب افتراضي بنفس إعدادات كولاب
+        self.features = ['dwell_ratio', 'avg_hold_ratio', 'std_hold_ratio', 'avg_flight_ratio', 'std_flight_ratio'] + [f'rel_digraph_{i}' for i in range(1, 12)]
+        pipe = Pipeline([
+            ('scaler', RobustScaler()),
+            ('svm', OneClassSVM(kernel='rbf', gamma=0.01, nu=0.15))
+        ])
+        dummy_data = np.random.normal(0.2, 0.03, (15, len(self.features)))
+        pipe.fit(pd.DataFrame(dummy_data, columns=self.features))
+        self.model = pipe
+
+state = SystemState()
+
+class VerifyPayload(BaseModel):
+    keystrokes: List[Dict[str, Any]]
+
+class EnrollPayload(BaseModel):
+    username: str
+    attempts: List[List[Dict[str, Any]]]
+
+def extract_kinetic_features(keystrokes: List[Dict[str, Any]]) -> Dict[str, float]:
+    holds = [k['hold'] for k in keystrokes]
+    flights = [k['flight'] for k in keystrokes]
+
+    total_hold = float(np.sum(holds))
+    total_flight = float(np.sum(flights[1:]))
+    total_time = total_hold + total_flight
+
+    dwell_ratio = total_hold / max(0.0001, total_flight)
+
+    relative_flights = [f / max(0.001, total_time) for f in flights[1:]]
+    relative_holds = [h / max(0.001, total_hold) for h in holds]
+
+    f_dict = {
+        'dwell_ratio': dwell_ratio,
+        'avg_hold_ratio': float(np.mean(relative_holds)),
+        'std_hold_ratio': float(np.std(relative_holds)),
+        'avg_flight_ratio': float(np.mean(relative_flights)),
+        'std_flight_ratio': float(np.std(relative_flights))
+    }
+
+    for i, rel_f in enumerate(relative_flights):
+        f_dict[f'rel_digraph_{i+1}'] = float(rel_f)
+
+    return f_dict
 
 @app.post("/api/verify")
-def verify_keystrokes(payload: BiometricPayload):
-    if model is None:
-        return {"authorized": False, "score": 0.0, "dwell_ratio": 0.0, "error": "Model not loaded"}
+def verify_attempt(payload: VerifyPayload):
+    if len(payload.keystrokes) < len(TARGET_PASSPHRASE):
+        return {"authorized": False, "score": -1.0, "message": "Incomplete sequence"}
 
-    # بناء مصفوفة الميزات الحقيقية المستخرجة من أجهزة المستخدم
-    df = pd.DataFrame([payload.features])
-    for col in features:
-        if col not in df.columns:
-            df[col] = 0.0
-    df = df[features]
+    feat_dict = extract_kinetic_features(payload.keystrokes)
+    df_eval = pd.DataFrame([feat_dict]).fillna(0)
 
-    # استدعاء دالة القرار لـ One-Class SVM الحقيقي
-    prediction = int(model.predict(df)[0])
-    raw_score = float(model.decision_function(df)[0])
+    for col in state.features:
+        if col not in df_eval.columns:
+            df_eval[col] = 0.0
+    df_eval = df_eval[state.features]
 
-    # قبول المالك إذا كان في النطاق الطبيعي للنموذج المدرب
-    is_authorized = (prediction == 1) or (raw_score >= -0.25)
+    pred = int(state.model.predict(df_eval)[0])
+    score = float(state.model.decision_function(df_eval)[0])
+
+    is_auth = (pred == 1) or (score >= -0.05)
 
     return {
-        "authorized": is_authorized,
-        "score": round(raw_score, 4),
-        "dwell_ratio": round(payload.features.get("dwell_ratio", 0.0), 3)
+        "authorized": is_auth,
+        "score": round(score, 4),
+        "dwell_ratio": round(feat_dict['dwell_ratio'], 3),
+        "owner": state.owner_name
     }
+
+@app.post("/api/enroll")
+def enroll_user(payload: EnrollPayload):
+    if len(payload.attempts) < 10:
+        return {"success": False, "message": "10 samples required"}
+
+    training_rows = []
+    for attempt in payload.attempts:
+        training_rows.append(extract_kinetic_features(attempt))
+
+    df_train = pd.DataFrame(training_rows).fillna(0)
+
+    new_pipeline = Pipeline([
+        ('scaler', RobustScaler()),
+        ('svm', OneClassSVM(kernel='rbf', gamma=0.01, nu=0.15))
+    ])
+    new_pipeline.fit(df_train)
+
+    state.model = new_pipeline
+    state.features = list(df_train.columns)
+    state.owner_name = payload.username.strip() if payload.username.strip() else "Verified Owner"
+
+    joblib.dump({'model': state.model, 'features': state.features}, MODEL_PATH)
+
+    return {"success": True, "owner": state.owner_name}
+
+@app.get("/api/state")
+def get_state():
+    return {"owner": state.owner_name, "target": TARGET_PASSPHRASE}
 
 @app.get("/", response_class=HTMLResponse)
 def serve_portal():
