@@ -22,7 +22,7 @@ st.markdown(
 @st.cache_resource
 def load_security_system():
   try:
-    artifact = joblib.load("biometric-model.pkl")
+    artifact = joblib.load("biometric_model.pkl")
     return artifact["model"], artifact["features"]
   except Exception as e:
     st.error(f"Error loading model artifact: {e}")
