@@ -4,4 +4,6 @@ numpy
 scikit-learn
 joblib
 matplotlib
-streamlit-keyup
+fastapi
+uvicorn
+pydantic
