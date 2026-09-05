@@ -4,34 +4,29 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Configure application layout and branding
+# Configure application layout
 st.set_page_config(page_title="AI Biometric Gateway", layout="centered")
 
-st.markdown(
-    """
+st.markdown("""
     <div style='text-align: center; margin-bottom: 25px;'>
         <h1 style='color: #0284c7;'>🛡️ Behavioral Biometrics Security Gateway</h1>
         <p style='color: #64748b;'>AI-driven keystroke dynamics analyzing hold latency and digraph transition rhythms</p>
     </div>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-
-# Load pre-trained model artifact and required feature signatures
+# Load pre-trained model artifact
 @st.cache_resource
 def load_security_system():
-  try:
-    artifact = joblib.load("biometric_model.pkl")
-    return artifact["model"], artifact["features"]
-  except Exception as e:
-    st.error(f"Error loading model artifact: {e}")
-    st.stop()
-
+    try:
+        artifact = joblib.load('biometric_model.pkl')
+        return artifact['model'], artifact['features']
+    except Exception as e:
+        st.error(f"Error loading model artifact: {e}")
+        st.stop()
 
 model, feature_columns = load_security_system()
 
-# Embedded JavaScript component for sub-millisecond hardware event capture
+# Communication bridge using query parameters (Most reliable in Streamlit Cloud)
 html_component = """
 <div style="background-color: #18181b; padding: 25px; border-radius: 12px; border: 1px solid #3f3f46; text-align: center; font-family: sans-serif;">
     <h3 style="color: #38bdf8; margin-top: 0;">Target Passphrase: <span style="color: #facc15;">Welcome Guest</span></h3>
@@ -47,12 +42,12 @@ html_component = """
 <script>
     let rawLog = [];
     let keyPresses = {};
-    const input = document.getElementById("target_box");
-    const feedback = document.getElementById("client-feedback");
+    const input = document.getElementById('target_box');
+    const feedback = document.getElementById('client-feedback');
     const targetPwd = "Welcome Guest";
 
-    input.addEventListener("keydown", (e) => {
-        if(e.key === "Enter") {
+    input.addEventListener('keydown', (e) => {
+        if(e.key === 'Enter') {
             processAttempt();
             return;
         }
@@ -60,7 +55,7 @@ html_component = """
         keyPresses[e.key] = performance.now();
     });
 
-    input.addEventListener("keyup", (e) => {
+    input.addEventListener('keyup', (e) => {
         if(e.key.length !== 1) return;
         if(keyPresses[e.key]) {
             rawLog.push({ key: e.key, down: keyPresses[e.key], up: performance.now() });
@@ -72,16 +67,13 @@ html_component = """
         if(input.value !== targetPwd) {
             feedback.style.color = "#f43f5e";
             feedback.innerText = "❌ Incorrect text! Type 'Welcome Guest' exactly.";
-            input.value = "";
-            rawLog = [];
-            keyPresses = {};
+            input.value = ''; rawLog = []; keyPresses = {};
             return;
         }
 
         feedback.style.color = "#facc15";
-        feedback.innerText = "Extracting behavioral biometrics & evaluating...";
+        feedback.innerText = "Processing behavioral rhythm...";
 
-        // Trace valid keystrokes backwards to maintain correct timing even after backspaces
         let cleanSeq = [];
         let tIndex = targetPwd.length - 1;
         for (let i = rawLog.length - 1; i >= 0; i--) {
@@ -99,72 +91,68 @@ html_component = """
             currentAttemptData.push({ key: cleanSeq[i].key, hold_time: hold, flight_time: flight });
         }
 
-        // Forward extracted timestamps directly to Python backend
-        window.parent.postMessage({
-            type: "streamlit:setComponentValue",
-            value: JSON.stringify(currentAttemptData)
-        }, "*");
-
-        input.value = "";
-        rawLog = [];
-        keyPresses = {};
+        // Send payload via parent window query parameters
+        const payloadStr = encodeURIComponent(JSON.stringify(currentAttemptData));
+        const currentUrl = new URL(window.parent.location.href);
+        currentUrl.searchParams.set('keystroke_payload', payloadStr);
+        window.parent.location.href = currentUrl.toString();
     }
 </script>
 """
 
-payload = components.html(html_component, height=230)
+# Render input component
+components.html(html_component, height=220)
 
-# Process payload received from the browser
-if payload:
-  try:
-    attempt_records = json.loads(payload)
-    if attempt_records:
-      test_df = pd.DataFrame(attempt_records)
+# Retrieve payload from URL params
+query_params = st.query_params
+payload_param = query_params.get("keystroke_payload", None)
 
-      # 1. Macro-level statistical features
-      f_dict = {
-          "total_time": (
-              test_df["hold_time"].sum() + test_df["flight_time"].sum()
-          ),
-          "avg_hold": test_df["hold_time"].mean(),
-          "avg_flight": test_df["flight_time"].mean(),
-          "std_hold": test_df["hold_time"].std() if len(test_df) > 1 else 0,
-          "std_flight": (
-              test_df["flight_time"].std() if len(test_df) > 1 else 0
-          ),
-      }
+if payload_param:
+    try:
+        attempt_records = json.loads(payload_param)
+        if attempt_records:
+            test_df = pd.DataFrame(attempt_records)
 
-      # 2. Sequential digraph transition features
-      flight_times = test_df["flight_time"].tolist()
-      for i in range(1, len(flight_times)):
-        f_dict[f"digraph_trans_{i}"] = flight_times[i]
+            # 1. Macro-level statistical features
+            f_dict = {
+                'total_time': test_df['hold_time'].sum() + test_df['flight_time'].sum(),
+                'avg_hold': test_df['hold_time'].mean(),
+                'avg_flight': test_df['flight_time'].mean(),
+                'std_hold': test_df['hold_time'].std() if len(test_df) > 1 else 0,
+                'std_flight': test_df['flight_time'].std() if len(test_df) > 1 else 0
+            }
 
-      X_live = pd.DataFrame([f_dict]).fillna(0)
+            # 2. Sequential digraph transition features
+            flight_times = test_df['flight_time'].tolist()
+            for i in range(1, len(flight_times)):
+                f_dict[f'digraph_trans_{i}'] = flight_times[i]
 
-      # Realign schema with training baseline
-      for col in feature_columns:
-        if col not in X_live.columns:
-          X_live[col] = 0
-      X_live = X_live[feature_columns]
+            X_live = pd.DataFrame([f_dict]).fillna(0)
 
-      prediction = model.predict(X_live)[0]
-      confidence = model.decision_function(X_live)[0]
+            # Realign schema with training baseline
+            for col in feature_columns:
+                if col not in X_live.columns:
+                    X_live[col] = 0
+            X_live = X_live[feature_columns]
 
-      st.write("")
-      if prediction == 1:
-        st.success("### 🟢 ACCESS GRANTED: Welcome back, Authorized User!")
-        st.info(
-            "Keystroke latencies and digraph transitions match the enrolled"
-            " baseline."
-        )
-      else:
-        st.error("### 🔴 ACCESS DENIED: Imposter Detected!")
-        st.warning(
-            "Passphrase characters match, but behavioral rhythm deviates"
-            " significantly from the owner's baseline."
-        )
+            # Model Evaluation
+            prediction = model.predict(X_live)[0]
+            confidence = model.decision_function(X_live)[0]
 
-      st.metric(label="AI Anomaly Decision Score", value=f"{confidence:.4f}")
+            st.write("")
+            if prediction == 1:
+                st.success("### 🟢 ACCESS GRANTED: Welcome back, Authorized User!")
+                st.info("Keystroke latencies and digraph transitions match the enrolled baseline.")
+            else:
+                st.error("### 🔴 ACCESS DENIED: Imposter Detected!")
+                st.warning("Passphrase characters match, but behavioral rhythm deviates significantly from the owner's baseline.")
 
-  except Exception as ex:
-    st.error(f"Processing error encountered: {ex}")
+            st.metric(label="AI Anomaly Decision Score", value=f"{confidence:.4f}")
+
+            # Clear parameter to keep app clean
+            if st.button("Clear / Next Attempt"):
+                st.query_params.clear()
+                st.rerun()
+
+    except Exception as ex:
+        st.error(f"Processing error encountered: {ex}")
