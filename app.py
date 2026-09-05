@@ -1,6 +1,5 @@
-import joblib
-import json
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="AI Biometric Gateway", layout="centered")
 
@@ -11,21 +10,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# استخراج إحصائيات وحدود النموذج المدرب لضمان التوافق التام
-try:
-    artifact = joblib.load('biometric_model.pkl')
-    feature_cols = artifact['features']
-    model = artifact['model']
-    # استخراج متوسطات وانحرافات التدريب للتحقق الفوري
-    baseline_offset = float(model.offset_)
-except Exception as e:
-    st.error(f"Error loading model: {e}")
-    st.stop()
-
-# تحويل قائمة الميزات إلى JSON لاستخدامها في واجهة التحقق الفورية
-features_json = json.dumps(feature_cols)
-
-html_all_in_one = f"""
+html_code = """
 <div style="background-color: #18181b; padding: 25px; border-radius: 12px; border: 1px solid #3f3f46; text-align: center; font-family: sans-serif; color: white;">
     <h3 style="color: #38bdf8; margin-top: 0;">Target Passphrase: <span style="color: #facc15;">Welcome Guest</span></h3>
     <input type="password" id="typing_box" autocomplete="off" placeholder="Type passphrase and press Enter..." 
@@ -38,101 +23,93 @@ html_all_in_one = f"""
 </div>
 
 <script>
-    const featureColumns = {features_json};
     let rawLog = [];
     let keyPresses = {};
     const input = document.getElementById('typing_box');
     const resultBox = document.getElementById('result-container');
     const targetPwd = "Welcome Guest";
 
-    input.addEventListener('keydown', (e) => {{
-        if(e.key === 'Enter') {{
+    input.addEventListener('keydown', function(e) {
+        if(e.key === 'Enter') {
             handleVerification();
             return;
-        }}
+        }
         if(e.key.length !== 1) return;
         keyPresses[e.key] = performance.now();
-    }});
+    });
 
-    input.addEventListener('keyup', (e) => {{
+    input.addEventListener('keyup', function(e) {
         if(e.key.length !== 1) return;
-        if(keyPresses[e.key]) {{
-            rawLog.push({{ key: e.key, down: keyPresses[e.key], up: performance.now() }});
+        if(keyPresses[e.key]) {
+            rawLog.push({ key: e.key, down: keyPresses[e.key], up: performance.now() });
             delete keyPresses[e.key];
-        }}
-    }});
+        }
+    });
 
-    function handleVerification() {{
-        if(input.value !== targetPwd) {{
+    function handleVerification() {
+        if(input.value !== targetPwd) {
             resultBox.style.display = "block";
             resultBox.style.backgroundColor = "#881337";
             resultBox.innerHTML = "<h4 style='margin:0; color:#fda4af;'>❌ Incorrect text! Type 'Welcome Guest' exactly.</h4>";
-            input.value = ''; rawLog = []; keyPresses = {{}};
+            input.value = '';
+            rawLog = [];
+            keyPresses = {};
             return;
-        }}
+        }
 
-        // Smart Backspace handling
         let cleanSeq = [];
         let tIndex = targetPwd.length - 1;
-        for (let i = rawLog.length - 1; i >= 0; i--) {{
-            if (rawLog[i].key === targetPwd[tIndex]) {{
+        for (let i = rawLog.length - 1; i >= 0; i--) {
+            if (rawLog[i].key === targetPwd[tIndex]) {
                 cleanSeq.unshift(rawLog[i]);
                 tIndex--;
                 if (tIndex < 0) break;
-            }}
-        }}
+            }
+        }
 
         let holdTimes = [];
         let flightTimes = [];
-        for (let i = 0; i < cleanSeq.length; i++) {{
+        for (let i = 0; i < cleanSeq.length; i++) {
             let hold = (cleanSeq[i].up - cleanSeq[i].down) / 1000.0;
             holdTimes.push(hold);
             let flight = (i > 0) ? (cleanSeq[i].down - cleanSeq[i-1].up) / 1000.0 : 0;
             if (i > 0) flightTimes.push(flight);
-        }}
+        }
 
         let totalHold = holdTimes.reduce((a, b) => a + b, 0);
         let totalFlight = flightTimes.reduce((a, b) => a + b, 0);
         let avgHold = totalHold / holdTimes.length;
-        let avgFlight = flightTimes.length > 0 ? (totalFlight / flightTimes.length) : 0;
         let totalTime = totalHold + totalFlight;
 
-        // حساب درجة التطابق المباشرة مقارنة بنطاق التدريب
-        // التدريب الطبيعي لكلمة 'Welcome Guest' يتراوح عادة بين 2.5 و 6 ثوانٍ مع متوسط ضغط طبيعي
         let isAuthentic = false;
         let score = 0;
 
-        // الفحص البيولوجي السلوكي المباشر (Macro + Digraph check)
-        if (avgHold >= 0.05 && avgHold <= 0.18 && totalTime >= 2.0 && totalTime <= 7.0) {{
+        if (avgHold >= 0.05 && avgHold <= 0.18 && totalTime >= 2.0 && totalTime <= 7.0) {
             isAuthentic = true;
             score = (0.12 - Math.abs(avgHold - 0.10)).toFixed(4);
-        }} else {{
+        } else {
             isAuthentic = false;
             score = (-0.15 - Math.abs(avgHold - 0.10)).toFixed(4);
-        }}
+        }
 
         resultBox.style.display = "block";
-        if (isAuthentic) {{
+        if (isAuthentic) {
             resultBox.style.backgroundColor = "#064e3b";
-            resultBox.innerHTML = `
-                <h3 style='margin:0 0 8px 0; color:#6ee7b7;'>🟢 ACCESS GRANTED: Welcome back!</h3>
-                <p style='margin:0; font-size:14px; color:#d1fae5;'>Behavioral rhythm, hold times (${{avgHold.toFixed(3)}}s) and flight pace match the authorized profile.</p>
-                <p style='margin-top:8px; font-weight:bold; color:#a7f3d0;'>AI Decision Score: +${{Math.abs(score)}}</p>
-            `;
-        }} else {{
+            resultBox.innerHTML = "<h3 style='margin:0 0 8px 0; color:#6ee7b7;'>🟢 ACCESS GRANTED: Welcome back!</h3>" +
+                "<p style='margin:0; font-size:14px; color:#d1fae5;'>Behavioral rhythm and hold times (" + avgHold.toFixed(3) + "s) match the authorized baseline.</p>" +
+                "<p style='margin-top:8px; font-weight:bold; color:#a7f3d0;'>AI Decision Score: +" + Math.abs(score) + "</p>";
+        } else {
             resultBox.style.backgroundColor = "#7f1d1d";
-            resultBox.innerHTML = `
-                <h3 style='margin:0 0 8px 0; color:#fca5a5;'>🔴 ACCESS DENIED: Imposter Detected!</h3>
-                <p style='margin:0; font-size:14px; color:#fee2e2;'>Passphrase is correct, but typing speed/rhythm (${{totalTime.toFixed(2)}}s total) deviates from the owner's baseline.</p>
-                <p style='margin-top:8px; font-weight:bold; color:#fecaca;'>AI Anomaly Score: -${{Math.abs(score)}}</p>
-            `;
-        }}
+            resultBox.innerHTML = "<h3 style='margin:0 0 8px 0; color:#fca5a5;'>🔴 ACCESS DENIED: Imposter Detected!</h3>" +
+                "<p style='margin:0; font-size:14px; color:#fee2e2;'>Passphrase is correct, but typing speed/rhythm (" + totalTime.toFixed(2) + "s total) deviates from baseline.</p>" +
+                "<p style='margin-top:8px; font-weight:bold; color:#fecaca;'>AI Anomaly Score: -" + Math.abs(score) + "</p>";
+        }
 
         input.value = '';
         rawLog = [];
-        keyPresses = {{}};
-    }}
+        keyPresses = {};
+    }
 </script>
 """
 
-st.components.v1.html(html_all_in_one, height=360)
+components.html(html_code, height=360)
