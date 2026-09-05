@@ -10,7 +10,7 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
 
 st.set_page_config(
-    page_title="AI Kinetic Biometrics | صهيب",
+    page_title="AI Kinetic Biometrics | عبداللطيف عسيري",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -82,21 +82,24 @@ st.markdown("""
 
 TARGET_PWD = "Welcome Guest"
 
-# Load or fallback to default baseline
+# Load the actual updated Colab model from GitHub
 @st.cache_resource
 def load_default_model():
     try:
-        artifact = joblib.load('biometric_model.pkl')
+        artifact = joblib.load('biometric_model (1).pkl')
         return artifact['model'], artifact.get('features', [])
     except Exception:
-        # Fallback dummy calibrated pipeline
-        pipe = Pipeline([
-            ('scaler', RobustScaler()),
-            ('svm', OneClassSVM(kernel='rbf', gamma=0.01, nu=0.15))
-        ])
-        dummy_x = np.random.normal(0.45, 0.05, (15, 17))
-        pipe.fit(dummy_x)
-        return pipe, [f'f_{i}' for i in range(17)]
+        try:
+            artifact = joblib.load('biometric_model.pkl')
+            return artifact['model'], artifact.get('features', [])
+        except Exception:
+            pipe = Pipeline([
+                ('scaler', RobustScaler()),
+                ('svm', OneClassSVM(kernel='rbf', gamma=0.01, nu=0.15))
+            ])
+            dummy_x = np.random.normal(0.45, 0.05, (15, 17))
+            pipe.fit(dummy_x)
+            return pipe, [f'f_{i}' for i in range(17)]
 
 if 'active_model' not in st.session_state:
     st.session_state.active_model, st.session_state.active_features = load_default_model()
@@ -109,14 +112,14 @@ if 'owner_trained' not in st.session_state:
 
 # Sidebar Navigation
 with st.sidebar:
-    st.markdown("<div style='text-align:center;'><span class='author-badge'>Project Lead: صهيب</span></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center;'><span class='author-badge'>Project Lead: عبداللطيف عسيري</span></div>", unsafe_allow_html=True)
     st.title("🛡️ القائمة الرئيسية")
     page = st.radio(
         "اختر واجهة الاستعراض:",
         ["🔐 البوابة الأمنية (Gateway)", "🎯 تدريب النموذج وبصمتك (Training)", "📊 لوحة الرسوم البيانية (Analytics)", "📖 المرجع وفلسفة المشروع (Docs)"]
     )
     st.markdown("---")
-    st.caption("نظام التحقق السلوكي البيومتري عبر ديناميكية حركة الأصابع (Keystroke Dynamics) ونماذج الذكاء الاصطناعي الأحادية الفئة.")
+    st.caption("نظام التحقق السلوكي البيومتري عبر ديناميكية حركة الأصابع (Keystroke Dynamics) بقيادة عبداللطيف عسيري.")
 
 # ==========================================
 # 1. PAGE: GATEWAY
@@ -124,7 +127,7 @@ with st.sidebar:
 if page == "🔐 البوابة الأمنية (Gateway)":
     st.markdown("<div style='text-align: center; margin-top: 10px;'><span class='author-badge'>Kinetic Security Terminal</span></div>", unsafe_allow_html=True)
     st.markdown("<h1 style='text-align: center; margin-bottom: 5px;'>🛡️ Behavioral Biometrics Cyber Gateway</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94a3b8;'>مطور النظام: <b>صهيب</b> | الحماية بواسطة الذكاء الاصطناعي السلوكي</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #94a3b8;'>مطور النظام: <b>عبداللطيف عسيري</b> | الحماية بواسطة الذكاء الاصطناعي السلوكي</p>", unsafe_allow_html=True)
     st.write("")
 
     with st.container():
@@ -158,7 +161,6 @@ if page == "🔐 البوابة الأمنية (Gateway)":
             elapsed = max(0.9, time.time() - (st.session_state.typing_start or time.time()))
             num_chars = len(TARGET_PWD)
             
-            # Kinematics calculations (Neuromuscular proportion)
             flight_time = elapsed * 0.65
             hold_time = elapsed * 0.35
             dwell_ratio = hold_time / max(0.001, flight_time)
@@ -177,7 +179,6 @@ if page == "🔐 البوابة الأمنية (Gateway)":
 
             X_curr = pd.DataFrame([feature_dict]).fillna(0)
             
-            # Reindex to match trained features
             if len(st.session_state.active_features) > 0:
                 for col in st.session_state.active_features:
                     if col not in X_curr.columns:
@@ -185,32 +186,33 @@ if page == "🔐 البوابة الأمنية (Gateway)":
                 X_curr = X_curr[st.session_state.active_features]
 
             try:
-                pred = st.session_state.active_model.predict(X_curr)[0]
-                score = st.session_state.active_model.decision_function(X_curr)[0]
+                score = float(st.session_state.active_model.decision_function(X_curr)[0])
+                # Operational tolerance to prevent false rejections
+                is_authorized = score >= -0.015
             except Exception:
-                pred = 1 if st.session_state.owner_trained else -1
-                score = 0.045 if pred == 1 else -0.065
+                score = 0.045 if st.session_state.owner_trained else -0.065
+                is_authorized = score >= 0.0
 
             st.write("")
             col_res1, col_res2 = st.columns([2, 1])
             with col_res1:
-                if pred == 1:
+                if is_authorized:
                     st.markdown("""
                         <div style='background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 12px; padding: 20px;'>
-                            <h3 style='color: #34d399; margin:0;'>🟢 ACCESS GRANTED: أهلاً بك، المالك المصرح له!</h3>
-                            <p style='color: #a7f3d0; margin: 6px 0 0 0; font-size: 14px;'>تمت مطابقة البصمة العصبية الحركية وتوزيع الضغطات بدقة عالية.</p>
+                            <h3 style='color: #34d399; margin:0;'>🟢 ACCESS GRANTED: أهلاً بك يا عبداللطيف عسيري!</h3>
+                            <p style='color: #a7f3d0; margin: 6px 0 0 0; font-size: 14px;'>تم التحقق بنجاح؛ تطابق البصمة الحركية ونسب التوقيت مع النموذج المدرّب.</p>
                         </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown("""
                         <div style='background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 12px; padding: 20px;'>
                             <h3 style='color: #f87171; margin:0;'>🔴 ACCESS DENIED: تم رصد محاولة تطفل!</h3>
-                            <p style='color: #fecaca; margin: 6px 0 0 0; font-size: 14px;'>كلمة المرور صحيحة تماماً، ولكن الإيقاع الحركي لأصابعك لا يطابق بصمة المالك.</p>
+                            <p style='color: #fecaca; margin: 6px 0 0 0; font-size: 14px;'>كلمة المرور صحيحة، ولكن الإيقاع الحركي لأصابعك لا يطابق بصمة عبداللطيف عسيري.</p>
                         </div>
                     """, unsafe_allow_html=True)
 
             with col_res2:
-                st.metric("Decision Score", f"{score:.4f}", delta="Authorized Profile" if pred == 1 else "Anomaly Flag")
+                st.metric("Decision Score", f"{score:.4f}", delta="Authorized Signature" if is_authorized else "Anomaly Flag")
                 st.metric("Dwell Ratio", f"{dwell_ratio:.3f}")
 
             st.session_state.typing_start = None
@@ -281,11 +283,10 @@ elif page == "🎯 تدريب النموذج وبصمتك (Training)":
 # ==========================================
 elif page == "📊 لوحة الرسوم البيانية (Analytics)":
     st.title("📊 التحليل البياني وديناميكية القياس الحيوي")
-    st.write("استعراض الأنماط البيومترية بناءً على مصفوفة بيانات **CMU Keystroke Benchmark** العالمية لجامعة كارنيغي ميلون[cite: 1].")
+    st.write("استعراض الأنماط البيومترية بناءً على مصفوفة بيانات **CMU Keystroke Benchmark** العالمية لجامعة كارنيغي ميلون.")
 
-    # Generate synthetic CMU-like distribution
     np.random.seed(42)
-    users = ['User A (Suhaib)', 'User B (Imposter 1)', 'User C (Imposter 2)']
+    users = ['User A (Abdul Latif Asiri)', 'User B (Imposter 1)', 'User C (Imposter 2)']
     data_points = []
     for u, (h_mean, f_mean) in zip(users, [(0.11, 0.28), (0.07, 0.18), (0.16, 0.38)]):
         for _ in range(80):
@@ -323,7 +324,7 @@ elif page == "📊 لوحة الرسوم البيانية (Analytics)":
 elif page == "📖 المرجع وفلسفة المشروع (Docs)":
     st.title("📖 المرجع العلمي والمعماري للمشروع")
     st.markdown("### Behavioral Biometrics Security Gateway")
-    st.markdown("**إشراف وتطوير المهندس:** صهيب")
+    st.markdown("**إشراف وتطوير المهندس:** عبداللطيف عسيري")
     
     st.markdown("""
     ---
@@ -340,7 +341,7 @@ elif page == "📖 المرجع وفلسفة المشروع (Docs)":
     st.markdown("""
     #### 3. خوارزمية التعلم الآلي المستخدمة:
     * **One-Class Support Vector Machine (RBF Kernel):**
-      تم اختيار هذا النموذج لأنه مصمم للتعلم من فئة واحدة (المالك الشرعي فقط) دون الحاجة لجمع بيانات آلاف المخترقين.
+      تم اختيار هذا النموذج لأنه مصمم للتعلم من فئة واحدة (المالك الشرعي فقط: عبداللطيف عسيري) دون الحاجة لجمع بيانات آلاف المخترقين.
     * **المعايرة المريحة ($nu=0.15, \gamma=0.01$):**
-      لضمان عدم التشدد الزائد والتعامل المرن مع حالات التعب وتغير سرعة المالك الطبيعية.
+      لضمان عدم التشدد الزائد والتعامل المرن مع حالات التعب وتغير سرعة اليد الطبيعية.
     """)
