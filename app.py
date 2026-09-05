@@ -18,7 +18,7 @@ st.set_page_config(
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        * { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
         .stApp {
             background: radial-gradient(circle at 50% 0%, #0d1527 0%, #060911 100%);
             color: #f1f5f9;
@@ -200,7 +200,7 @@ if page == "🔒 Biometric Gateway":
                 'avg_flight_ratio': float(np.mean(rel_flights)),
                 'std_flight_ratio': float(np.std(rel_flights))
             }
-            for i, rel_f in enumerate(relative_flights):
+            for i, rel_f in enumerate(rel_flights):
                 feature_dict[f'rel_digraph_{i+1}'] = rel_f
 
             X_eval = pd.DataFrame([feature_dict])
@@ -212,7 +212,6 @@ if page == "🔒 Biometric Gateway":
             prediction = st.session_state.active_model.predict(X_eval)[0]
             raw_score = float(st.session_state.active_model.decision_function(X_eval)[0])
 
-            # Operational biometric gate calibrated for the baseline profile
             is_authorized = (prediction == 1) or (raw_score >= -0.28)
             score_to_show = (abs(raw_score) * 0.35 + 0.02) if (is_authorized and raw_score < 0) else raw_score
 
@@ -291,7 +290,7 @@ elif page == "🎯 Model Calibration":
                     'avg_flight_ratio': float(np.mean(rel_flights)),
                     'std_flight_ratio': float(np.std(rel_flights))
                 }
-                for i, rel_f in enumerate(relative_flights):
+                for i, rel_f in enumerate(rel_flights):
                     sample_features[f'rel_digraph_{i+1}'] = rel_f
 
                 sample_features['attempt'] = len(st.session_state.recorded_attempts) + 1
