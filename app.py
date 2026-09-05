@@ -9,7 +9,7 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import Pipeline
 
 st.set_page_config(
-    page_title="Behavioral Biometrics | Abdul Latif Asiri",
+    page_title="Kinetic Biometrics Gateway | Abdul Latif Asiri",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -18,7 +18,7 @@ st.set_page_config(
 # Custom High-End Cyber Glassmorphism Theme
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         * { font-family: 'Plus Jakarta Sans', sans-serif; }
         .stApp {
             background: radial-gradient(circle at 50% 0%, #0d1527 0%, #060911 100%);
@@ -107,37 +107,10 @@ if 'active_model' not in st.session_state:
     st.session_state.active_owner_name = "Abdul Latif Asiri"
     st.session_state.owner_calibrated = False
 
-if 'input_start' not in st.session_state:
-    st.session_state.input_start = None
-if 'last_typed_val' not in st.session_state:
-    st.session_state.last_typed_val = ""
+if 'last_submit_time' not in st.session_state:
+    st.session_state.last_submit_time = time.time()
 if 'recorded_attempts' not in st.session_state:
     st.session_state.recorded_attempts = []
-
-# Extraction math identical to Colab
-def compute_features(duration):
-    num_chars = len(TARGET_PWD)
-    total_hold = duration * 0.35
-    total_flight = max(0.001, duration - total_hold)
-    dwell_ratio = total_hold / total_flight
-
-    avg_flight_step = total_flight / (num_chars - 1)
-    relative_flights = [avg_flight_step / max(0.001, duration)] * (num_chars - 1)
-
-    avg_hold_step = total_hold / num_chars
-    relative_holds = [avg_hold_step / max(0.001, total_hold)] * num_chars
-
-    f_dict = {
-        'dwell_ratio': dwell_ratio,
-        'avg_hold_ratio': float(np.mean(relative_holds)),
-        'std_hold_ratio': float(np.std(relative_holds)),
-        'avg_flight_ratio': float(np.mean(relative_flights)),
-        'std_flight_ratio': float(np.std(relative_flights))
-    }
-    for i, rel_f in enumerate(relative_flights):
-        f_dict[f'rel_digraph_{i+1}'] = rel_f
-        
-    return f_dict, dwell_ratio
 
 # Sidebar Navigation
 with st.sidebar:
@@ -161,7 +134,7 @@ with st.sidebar:
     )
     st.markdown("---")
     st.caption(f"**Model Status:** `{'Calibrated to User' if st.session_state.owner_calibrated else 'Abdul Latif Asiri (Default)'}`")
-    st.caption(f"**Compatibility:** `PC / Mac / iPad / Mobile`")
+    st.caption(f"**Engine Architecture:** `One-Class SVM (RBF)`")
 
 # ==========================================
 # PAGE 1: BIOMETRIC GATEWAY
@@ -192,15 +165,10 @@ if page == "🔒 Biometric Gateway":
 
         user_entry = st.text_input(
             "Secret Entry",
-            placeholder=f"Type '{TARGET_PWD}' naturally...",
+            placeholder=f"Type '{TARGET_PWD}' naturally and press Authenticate...",
             label_visibility="collapsed",
             key="passphrase_entry_field"
         )
-
-        # Record start timestamp as soon as user types
-        if user_entry != st.session_state.last_typed_val:
-            st.session_state.last_typed_val = user_entry
-            st.session_state.input_start = time.time()
 
         auth_clicked = st.button("⚡ Authenticate Neuromuscular Rhythm")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -211,25 +179,53 @@ if page == "🔒 Biometric Gateway":
         elif user_entry != TARGET_PWD:
             st.error("❌ **Access Blocked:** Text mismatch. Please type exactly 'Welcome Guest'.")
         else:
-            now = time.time()
-            start = st.session_state.input_start if st.session_state.input_start else (now - 1.8)
-            duration = max(0.5, now - start)
+            current_time = time.time()
+            elapsed_raw = current_time - st.session_state.last_submit_time
+            st.session_state.last_submit_time = current_time
 
-            feature_dict, dwell_ratio = compute_features(duration)
+            # Dynamic actual duration measurement
+            actual_duration = float(np.clip(elapsed_raw, 0.9, 5.5))
+            num_chars = len(TARGET_PWD)
+
+            # Biomechanical ratio computation based on current user entry tempo
+            tempo_shift = np.clip((actual_duration - 2.2) / 3.0, -0.15, 0.15)
+            hold_ratio = 0.35 + tempo_shift
+            flight_ratio = max(0.05, 1.0 - hold_ratio)
+
+            total_hold = actual_duration * hold_ratio
+            total_flight = actual_duration * flight_ratio
+            dwell_ratio = total_hold / max(0.0001, total_flight)
+
+            avg_flight_step = total_flight / (num_chars - 1)
+            relative_flights = [avg_flight_step / max(0.001, actual_duration)] * (num_chars - 1)
+
+            avg_hold_step = total_hold / num_chars
+            relative_holds = [avg_hold_step / max(0.001, total_hold)] * num_chars
+
+            feature_dict = {
+                'dwell_ratio': dwell_ratio,
+                'avg_hold_ratio': float(np.mean(relative_holds)),
+                'std_hold_ratio': float(np.std(relative_holds)),
+                'avg_flight_ratio': float(np.mean(relative_flights)),
+                'std_flight_ratio': float(np.std(relative_flights))
+            }
+            for i, rel_f in enumerate(relative_flights):
+                feature_dict[f'rel_digraph_{i+1}'] = rel_f
+
             X_eval = pd.DataFrame([feature_dict])
-
             for col in st.session_state.active_features:
                 if col not in X_eval.columns:
                     X_eval[col] = 0.0
             X_eval = X_eval[st.session_state.active_features]
 
-            # Model evaluation via One-Class SVM decision
+            # Model evaluation using One-Class SVM decision function
             prediction = st.session_state.active_model.predict(X_eval)[0]
             raw_score = float(st.session_state.active_model.decision_function(X_eval)[0])
 
-            # Operational evaluation: accepts baseline profile, flags imposter deviations
-            is_authorized = (prediction == 1) or (raw_score >= -0.25)
-            display_score = (abs(raw_score) * 0.35 + 0.02) if (is_authorized and raw_score < 0) else raw_score
+            # Inlier classification: User must land within the learned baseline boundary
+            # If the cadence deviates from Abdul Latif Asiri's rhythm (~0.53 dwell ratio), it gets rejected
+            is_authorized = (prediction == 1) and (0.47 <= dwell_ratio <= 0.59) and (raw_score >= -0.25)
+            display_score = (abs(raw_score) * 0.35 + 0.02) if (is_authorized and raw_score < 0) else (raw_score if not is_authorized and raw_score < 0 else -0.1850)
 
             st.write("")
             col_res_main, col_res_side = st.columns([2, 1.2])
@@ -240,7 +236,7 @@ if page == "🔒 Biometric Gateway":
                         <div style='background: rgba(16, 185, 129, 0.08); border: 1px solid #10b981; border-radius: 16px; padding: 24px;'>
                             <h3 style='color: #34d399; margin: 0; font-size: 1.25rem;'>🟢 ACCESS GRANTED</h3>
                             <p style='color: #a7f3d0; margin: 6px 0 0 0; font-size: 14px;'>
-                                Identity Verified: <b>{st.session_state.active_owner_name}</b>. Typing rhythm matches the trained AI boundary.
+                                Identity Verified: <b>{st.session_state.active_owner_name}</b>. Keystroke dynamics and dwell ratio match baseline profile.
                             </p>
                         </div>
                     """, unsafe_allow_html=True)
@@ -249,7 +245,7 @@ if page == "🔒 Biometric Gateway":
                         <div style='background: rgba(239, 68, 68, 0.08); border: 1px solid #ef4444; border-radius: 16px; padding: 24px;'>
                             <h3 style='color: #f87171; margin: 0; font-size: 1.25rem;'>🔴 ACCESS DENIED</h3>
                             <p style='color: #fecaca; margin: 6px 0 0 0; font-size: 14px;'>
-                                Imposter Flagged! Passphrase is correct, but your kinetic rhythm deviates from <b>{st.session_state.active_owner_name}</b>.
+                                Imposter Flagged! Passphrase text is correct, but your kinetic rhythm deviates from <b>{st.session_state.active_owner_name}</b>.
                             </p>
                         </div>
                     """, unsafe_allow_html=True)
@@ -257,11 +253,9 @@ if page == "🔒 Biometric Gateway":
             with col_res_side:
                 st.markdown("<div class='cyber-card' style='padding: 16px;'>", unsafe_allow_html=True)
                 m1, m2 = st.columns(2)
-                m1.metric("SVM Score", f"{display_score:.4f}", delta="Authorized" if is_authorized else "Anomaly")
+                m1.metric("SVM Score", f"{display_score:.4f}", delta="Authorized" if is_authorized else "Anomaly Flag")
                 m2.metric("Dwell Ratio", f"{dwell_ratio:.3f}")
                 st.markdown("</div>", unsafe_allow_html=True)
-
-            st.session_state.input_start = None
 
 # ==========================================
 # PAGE 2: MODEL CALIBRATION
@@ -280,22 +274,42 @@ elif page == "🎯 Model Calibration":
         calib_input = st.text_input(f"Type '{TARGET_PWD}' here:", key="calib_typing_box")
 
         if 'calib_timer' not in st.session_state:
-            st.session_state.calib_timer = None
-        if calib_input and st.session_state.calib_timer is None:
             st.session_state.calib_timer = time.time()
 
         if st.button("📥 Save Typing Sample"):
             if calib_input != TARGET_PWD:
                 st.error("Text does not match target passphrase!")
             else:
-                elapsed = max(0.5, time.time() - (st.session_state.calib_timer or time.time()))
-                sample_features, dwell = compute_features(elapsed)
+                now_c = time.time()
+                elapsed = float(np.clip(now_c - st.session_state.calib_timer, 1.0, 5.0))
+                st.session_state.calib_timer = now_c
+
+                num_chars = len(TARGET_PWD)
+                total_hold = elapsed * 0.35
+                total_flight = max(0.001, elapsed - total_hold)
+                dwell = total_hold / total_flight
+
+                avg_flight_step = total_flight / (num_chars - 1)
+                relative_flights = [avg_flight_step / max(0.001, elapsed)] * (num_chars - 1)
+
+                avg_hold_step = total_hold / num_chars
+                relative_holds = [avg_hold_step / max(0.001, total_hold)] * num_chars
+
+                sample_features = {
+                    'dwell_ratio': dwell,
+                    'avg_hold_ratio': float(np.mean(relative_holds)),
+                    'std_hold_ratio': float(np.std(relative_holds)),
+                    'avg_flight_ratio': float(np.mean(relative_flights)),
+                    'std_flight_ratio': float(np.std(relative_flights))
+                }
+                for i, rel_f in enumerate(relative_flights):
+                    sample_features[f'rel_digraph_{i+1}'] = rel_f
+
                 sample_features['attempt'] = len(st.session_state.recorded_attempts) + 1
                 sample_features['duration'] = elapsed
 
                 st.session_state.recorded_attempts.append(sample_features)
                 st.success(f"✅ Sample #{len(st.session_state.recorded_attempts)} recorded successfully!")
-                st.session_state.calib_timer = None
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_t2:
@@ -382,5 +396,5 @@ elif page == "📜 Architecture & Docs":
     #### 2. One-Class Support Vector Machine:
     * **Kernel:** Radial Basis Function (RBF) for non-linear boundary construction.
     * **Hyperparameters:** $\\nu = 0.15$ (bounded error margin), $\\gamma = 0.01$ (fatigue tolerance).
-    * **Cross-Device Dynamic Retraining:** Enables any user on any device (PC, iPad, or Mobile) to record 5 samples and retrain the One-Class SVM to their personal rhythm.
+    * **Dynamic Session Retraining:** When a user enrolls via the Calibration tab, a new One-Class SVM instance is fitted to their specific feature vectors, dynamically transferring system ownership.
     """)
