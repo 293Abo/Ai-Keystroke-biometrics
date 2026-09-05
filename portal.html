@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biometric Cyber Terminal | Real-Time Hardware Capture</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; padding: 0; }
+        body {
+            background: radial-gradient(circle at 50% 0%, #0d1527 0%, #060911 100%);
+            color: #f1f5f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .container {
+            width: 100%; max-width: 600px; background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 24px;
+            padding: 35px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); backdrop-filter: blur(16px);
+        }
+        .badge {
+            display: inline-block; background: rgba(14, 165, 233, 0.12); color: #38bdf8;
+            padding: 6px 14px; border-radius: 9999px; font-size: 11px; font-weight: 700;
+            letter-spacing: 0.05em; text-transform: uppercase; border: 1px solid rgba(56, 189, 248, 0.25); margin-bottom: 12px;
+        }
+        h1 { font-size: 1.7rem; font-weight: 800; margin-bottom: 6px; }
+        p.subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 22px; }
+        .target-box {
+            display: flex; justify-content: space-between; align-items: center; background: rgba(2, 6, 23, 0.5);
+            padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 18px;
+        }
+        input[type="text"] {
+            width: 100%; padding: 16px 20px; font-size: 17px; text-align: center; color: #fff;
+            background: rgba(2, 6, 23, 0.8); border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 12px; outline: none; transition: 0.2s;
+        }
+        input[type="text"]:focus { border-color: #38bdf8; box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15); }
+        button {
+            width: 100%; margin-top: 16px; padding: 15px; font-size: 15px; font-weight: 700;
+            background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); color: white;
+            border: none; border-radius: 12px; cursor: pointer; transition: 0.2s;
+        }
+        button:hover { opacity: 0.95; }
+        .result-card {
+            margin-top: 22px; padding: 18px; border-radius: 16px; display: none;
+        }
+        .granted { background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; color: #34d399; }
+        .denied { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #f87171; }
+        .metrics { display: flex; gap: 12px; margin-top: 14px; }
+        .metric-box {
+            flex: 1; background: rgba(0, 0, 0, 0.3); padding: 10px; border-radius: 10px;
+            text-align: center; font-size: 12px; color: #94a3b8;
+        }
+        .metric-box span { display: block; font-size: 16px; font-weight: 700; color: #fff; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="badge">Hardware Hook Terminal</div>
+        <h1>Behavioral Biometrics Portal</h1>
+        <p class="subtitle">Direct Millisecond Neuromuscular Capture & One-Class SVM</p>
+
+        <div class="target-box">
+            <span style="font-size: 13px; color: #94a3b8; font-weight: 600;">TARGET PASSPHRASE</span>
+            <code style="color: #38bdf8; font-weight: 700; font-size: 14px;">Welcome Guest</code>
+        </div>
+
+        <input type="text" id="passInput" placeholder="Click here and type 'Welcome Guest'..." autocomplete="off">
+        <button id="verifyBtn">⚡ Authenticate Neuromuscular Rhythm</button>
+
+        <div id="resultCard" class="result-card">
+            <h3 id="resTitle" style="margin-bottom: 4px;"></h3>
+            <p id="resDesc" style="font-size: 13px; opacity: 0.9;"></p>
+            <div class="metrics">
+                <div class="metric-box">True SVM Score<span id="scoreText">-</span></div>
+                <div class="metric-box">Hardware Dwell Ratio<span id="dwellText">-</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TARGET = "Welcome Guest";
+        const input = document.getElementById("passInput");
+        const btn = document.getElementById("verifyBtn");
+        const card = document.getElementById("resultCard");
+
+        let keyPressTimes = {};
+        let recordedEvents = [];
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key.length === 1 && !keyPressTimes[e.key]) {
+                keyPressTimes[e.key] = performance.now();
+            }
+        });
+
+        input.addEventListener("keyup", (e) => {
+            if (e.key.length === 1 && keyPressTimes[e.key]) {
+                recordedEvents.push({
+                    key: e.key,
+                    down: keyPressTimes[e.key],
+                    up: performance.now()
+                });
+                delete keyPressTimes[e.key];
+            }
+        });
+
+        btn.addEventListener("click", async () => {
+            if (input.value !== TARGET) {
+                alert("Please type the exact phrase: " + TARGET);
+                return;
+            }
+            if (recordedEvents.length < TARGET.length) {
+                alert("Please type naturally on the keyboard.");
+                return;
+            }
+
+            const holds = recordedEvents.map(e => (e.up - e.down) / 1000.0);
+            const flights = [];
+            for (let i = 1; i < recordedEvents.length; i++) {
+                flights.push((recordedEvents[i].down - recordedEvents[i-1].up) / 1000.0);
+            }
+
+            const totalHold = holds.reduce((a, b) => a + b, 0);
+            const totalFlight = Math.max(0.0001, flights.reduce((a, b) => a + b, 0));
+            const totalTime = totalHold + totalFlight;
+            const dwellRatio = totalHold / totalFlight;
+
+            const relFlights = flights.map(f => f / Math.max(0.001, totalTime));
+            const relHolds = holds.map(h => h / Math.max(0.001, totalHold));
+
+            const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+            const std = arr => {
+                const m = avg(arr);
+                return Math.sqrt(arr.reduce((s, x) => s + Math.pow(x - m, 2), 0) / arr.length);
+            };
+
+            const featureDict = {
+                'dwell_ratio': dwellRatio,
+                'avg_hold_ratio': avg(relHolds),
+                'std_hold_ratio': std(relHolds),
+                'avg_flight_ratio': avg(relFlights),
+                'std_flight_ratio': std(relFlights)
+            };
+            relFlights.forEach((rf, i) => { featureDict[`rel_digraph_${i+1}`] = rf; });
+
+            btn.innerText = "⏳ Verifying with AI...";
+            try {
+                const res = await fetch("/api/verify", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ features: featureDict })
+                });
+                const data = await res.json();
+
+                card.style.display = "block";
+                document.getElementById("scoreText").innerText = data.score;
+                document.getElementById("dwellText").innerText = data.dwell_ratio;
+
+                if (data.authorized) {
+                    card.className = "result-card granted";
+                    document.getElementById("resTitle").innerText = "🟢 ACCESS GRANTED";
+                    document.getElementById("resDesc").innerText = "Biometric rhythm verified against the trained One-Class SVM.";
+                } else {
+                    card.className = "result-card denied";
+                    document.getElementById("resTitle").innerText = "🔴 ACCESS DENIED";
+                    document.getElementById("resDesc").innerText = "Imposter cadence detected. Hardware flight/hold vectors rejected.";
+                }
+            } catch (err) {
+                alert("Connection error: " + err);
+            } finally {
+                btn.innerText = "⚡ Authenticate Neuromuscular Rhythm";
+                recordedEvents = [];
+                keyPressTimes = {};
+            }
+        });
+    </script>
+</body>
+</html>
