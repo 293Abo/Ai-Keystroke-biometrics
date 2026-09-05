@@ -81,7 +81,7 @@ st.markdown("""
 
 TARGET_PWD = "Welcome Guest"
 
-# Load Primary Baseline Model Artifact (Trained on Abdul Latif Asiri)
+# Load Primary Baseline Model Artifact (Trained on AbdulLatif Asiri)
 @st.cache_resource
 def load_colab_model():
     candidates = ['biometric_model (1).pkl', 'biometric_model.pkl']
@@ -105,7 +105,7 @@ if 'active_model' not in st.session_state:
     st.session_state.active_model = loaded_model
     st.session_state.active_features = loaded_features
     st.session_state.model_source = source_name
-    st.session_state.active_owner_name = "Abdul Latif Asiri (Original Model)"
+    st.session_state.active_owner_name = "AbdulLatif Asiri (Original Model)"
 
 if 'typing_start' not in st.session_state:
     st.session_state.typing_start = None
@@ -164,7 +164,7 @@ with st.sidebar:
     )
     st.markdown("---")
     st.caption(f"**Model Type:** `One-Class SVM (RBF Kernel)`")
-    st.caption(f"**Current Status:** `{'Trained on New User' if st.session_state.owner_calibrated else 'Trained on Abdul Latif Asiri'}`")
+    st.caption(f"**Current Status:** `{'Trained on New User' if st.session_state.owner_calibrated else 'Trained on AbdulLatif Asiri'}`")
 
 # ==========================================
 # PAGE 1: BIOMETRIC GATEWAY
@@ -232,7 +232,7 @@ if page == "🔒 Biometric Gateway":
             decision_score = float(st.session_state.active_model.decision_function(X_eval)[0])
 
             # Operational threshold: One-Class SVM classifies inlier if decision_function >= 0
-            is_authorized = (prediction == 1) or (decision_score >= -0.015)
+            is_authorized = (prediction == 1) or (decision_score >= -0.025)
 
             st.write("")
             col_res_main, col_res_side = st.columns([2, 1.2])
@@ -358,7 +358,7 @@ elif page == "📈 Kinematic Analytics":
 
     fig, ax = plt.subplots(figsize=(10, 4.5), facecolor='#090e1a')
     ax.set_facecolor('#0f172a')
-    palette = {'Owner (Abdul Latif Asiri)': '#38bdf8', 'Imposter 1': '#f87171', 'Imposter 2': '#fbbf24'}
+    palette = {'Owner (AbdulLatif Asiri)': '#38bdf8', 'Imposter 1': '#f87171', 'Imposter 2': '#fbbf24'}
     for user, col in palette.items():
         sub = df_p[df_p['Profile'] == user]
         ax.scatter(sub['Hold_Time'], sub['Flight_Time'], color=col, label=user, alpha=0.75, s=45)
@@ -379,7 +379,7 @@ elif page == "📈 Kinematic Analytics":
 elif page == "📜 Architecture & Docs":
     st.markdown("<div class='badge-pill'>Documentation</div>", unsafe_allow_html=True)
     st.title("📜 Architecture & Biometric Equations")
-    st.markdown("Developed and engineered by **Abdul Latif Asiri**.")
+    st.markdown("Developed and engineered by **AbdulLatif Asiri**.")
     st.markdown("""
     ---
     #### 1. Invariant Neuromuscular Formulations:
