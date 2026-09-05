@@ -210,7 +210,7 @@ if page == "🔒 Biometric Gateway":
             svm_score = float(st.session_state.active_model.decision_function(X_eval)[0])
 
             # شرط النموذج النقي: يقبل إذا كانت المسافة الإقليدية ضمن النطاق
-            is_authorized = (prediction == 1) or (svm_score >= -0.15)
+            is_authorized = (prediction == 1) or (svm_score >= -0.25)
 
             st.write("")
             col_res_main, col_res_side = st.columns([2, 1.2])
