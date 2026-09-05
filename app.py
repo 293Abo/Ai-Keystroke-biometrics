@@ -1,8 +1,9 @@
-import json
-import joblib
-import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
+import numpy as np
+import joblib
+import json
+from streamlit_javascript import st_javascript
 
 st.set_page_config(page_title="AI Biometric Gateway", layout="centered")
 
@@ -25,8 +26,8 @@ def load_security_system():
 
 model, feature_columns = load_security_system()
 
-# JavaScript Bridge to trigger Streamlit's native input element
-js_bridge = """
+# Embed Self-Contained HTML Form with localStorage Bridge
+st.components.v1.html("""
 <div style="background-color: #18181b; padding: 25px; border-radius: 12px; border: 1px solid #3f3f46; text-align: center; font-family: sans-serif;">
     <h3 style="color: #38bdf8; margin-top: 0;">Target Passphrase: <span style="color: #facc15;">Welcome Guest</span></h3>
     <input type="password" id="typing_box" autocomplete="off" placeholder="Type passphrase and press Enter..." 
@@ -70,8 +71,8 @@ js_bridge = """
             return;
         }
 
-        feedback.style.color = "#facc15";
-        feedback.innerText = "Processing biometric pattern...";
+        feedback.style.color = "#22c55e";
+        feedback.innerText = "✅ Pattern captured! Processing decision...";
 
         let cleanSeq = [];
         let tIndex = targetPwd.length - 1;
@@ -90,42 +91,26 @@ js_bridge = """
             currentAttemptData.push({ key: cleanSeq[i].key, hold_time: hold, flight_time: flight });
         }
 
-        // Bridge: Transfer directly to Streamlit's native input element via React state
-        const targetInput = window.parent.document.querySelector('input[aria-label="bridge_channel"]');
-        if (targetInput) {
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            nativeInputValueSetter.call(targetInput, JSON.stringify(currentAttemptData));
-            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-            targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        // Save safely into browser storage shared across iframes
+        window.localStorage.setItem("latest_biometric_data", JSON.stringify(currentAttemptData));
+        window.localStorage.setItem("biometric_timestamp", Date.now().toString());
 
         input.value = '';
         rawLog = [];
         keyPresses = {};
     }
 </script>
-"""
+""", height=220)
 
-# Native Streamlit input hidden from normal view to receive the bridge payload
-payload_receiver = st.text_input("bridge_channel", label_visibility="collapsed", key="bridge_receiver")
+# Retrieve data directly using streamlit_javascript (Bypasses all iframe security restrictions)
+retrieved_json = st_javascript("""await (async () => {
+    return window.localStorage.getItem("latest_biometric_data");
+})()""")
 
-# Hide the bridge input box visually using CSS
-st.markdown("""
-    <style>
-        div[data-testid="stTextInput"]:has(input[aria-label="bridge_channel"]) {
-            display: none !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# Render interactive component
-components.html(js_bridge, height=220)
-
-# Process payload received inside Python
-if payload_receiver:
+if retrieved_json and retrieved_json != "null":
     try:
-        attempt_records = json.loads(payload_receiver)
-        if attempt_records:
+        attempt_records = json.loads(retrieved_json)
+        if attempt_records and len(attempt_records) > 0:
             test_df = pd.DataFrame(attempt_records)
 
             f_dict = {
@@ -160,5 +145,10 @@ if payload_receiver:
 
             st.metric(label="AI Anomaly Decision Score", value=f"{confidence:.4f}")
 
+            # Clear button to allow another test
+            if st.button("Reset / Test Again"):
+                st_javascript("""window.localStorage.removeItem("latest_biometric_data");""")
+                st.rerun()
+
     except Exception as ex:
-        st.error(f"Processing error encountered: {ex}")
+        st.error(f"Evaluation error: {ex}")
